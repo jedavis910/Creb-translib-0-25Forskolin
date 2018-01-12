@@ -44,11 +44,15 @@ barcode_map <- read_tsv('../../BCMap/uniqueSP2345.txt',
 #million of total reads per index
 
 bc_map_join_bc <- function(df1, df2) {
-  keep_bc <- left_join(df1, df2, by = 'barcode') %>%
-    mutate(num_reads = if_else(is.na(num_reads), 
-                               as.integer(0), 
-                               num_reads)) %>%
+  df2 <- df2 %>%
     mutate(normalized = as.numeric((num_reads * 1000000) / (sum(num_reads))))
+  keep_bc <- left_join(df1, df2, by = 'barcode') %>%
+    mutate(normalized = if_else(is.na(normalized), 
+                               0, 
+                               normalized)) %>%
+    mutate(num_reads = if_else(is.na(num_reads), 
+                                as.integer(0), 
+                                num_reads))
   return(keep_bc)
 }
 
@@ -90,54 +94,29 @@ variant_counts_R0B <- var_sum_bc_num(bc_join_R0B)
 variant_counts_DNA <- var_sum_bc_num(bc_join_DNA)
 
 
-#Join RNA to DNA and determine expression from summing--------------------------
-
-#combine DNA and RNA cumm. BC counts, only keeping instances in both sets and 
-#determining RNA/DNA per variant. Ratio is summed normalized reads of RNA over 
-#summed normalized reads DNA
-
-var_expression <- function(df1, df2) {
-  RNA_DNA <- inner_join(df1, df2, 
-                        by = c("name", "subpool", "most_common"), 
-                        suffix = c("_RNA", "_DNA")
-                        ) %>%
-    mutate(ratio = sum_RNA / sum_DNA)
-  print('x defined as RNA, y defined as DNA in var_expression(x,y)')
-  return(RNA_DNA)
-}
-
-RNA_DNA_R25A <- var_expression(variant_counts_R25A, variant_counts_DNA)
-RNA_DNA_R25B <- var_expression(variant_counts_R25B, variant_counts_DNA)
-RNA_DNA_R0A <- var_expression(variant_counts_R0A, variant_counts_DNA)
-RNA_DNA_R0B <- var_expression(variant_counts_R0B, variant_counts_DNA)
-
-
 #combine biological replicates--------------------------------------------------
 
 var_rep <- function(df0A, df0B, df25A, df25B) {
   join_0 <- inner_join(df0A, df0B, 
-                       by = c(
-                         "name", "subpool", "most_common", "sum_DNA", 
-                         "barcodes_DNA"), 
+                       by = c("name", "subpool", "most_common"), 
                        suffix = c("_0A", "_0B")
-                       )
+  )
   join_25 <- inner_join(df25A, df25B, 
-                       by = c(
-                         "name", "subpool", "most_common", "sum_DNA", 
-                         "barcodes_DNA"), 
-                       suffix = c("_25A", "_25B")
-                       )
+                        by = c("name", "subpool", "most_common"), 
+                        suffix = c("_25A", "_25B")
+  )
   join_0_25 <- inner_join(join_0, join_25,
-                        by = c("name", "subpool", "most_common", "sum_DNA", 
-                               "barcodes_DNA")
-                        )
+                          by = c("name", "subpool", "most_common")
+  )
   print('processed dfs in order: df0A, df0B, df25A, df25B')
   return(join_0_25)
 }
 
-rep_1_2 <- var_rep(RNA_DNA_R0A, RNA_DNA_R0B, RNA_DNA_R25A, RNA_DNA_R25B)
+rep_1_2 <- var_rep(variant_counts_R0A, variant_counts_R0B, 
+                   variant_counts_R25A, variant_counts_R25B)
 
-#Normalize variants to background-----------------------------------------------
+
+#Normalize variants to background, determine induction--------------------------
 
 #After combining, rename backgrounds to simplified names, make background column 
 #(excluding controls), separate out background values in each dataset and left 
@@ -145,146 +124,168 @@ rep_1_2 <- var_rep(RNA_DNA_R0A, RNA_DNA_R0B, RNA_DNA_R25A, RNA_DNA_R25B)
 #background in that biological replicate. Determine average normalized 
 #expression across biological replicates.
 
-#Add text here
-
-
-
-
-
-var_log <- function(df) {
-  log_ratio <- df %>%
-    mutate(log_ratio_25_1 = log10(ratio_25_1)) %>%
-    mutate(log_ratio_25_2 = log10(ratio_25_2)) %>%
-    mutate(log_ratio_0_1 = log10(ratio_0_1)) %>%
-    mutate(log_ratio_0_2 = log10(ratio_0_2))
-  return(log_ratio)
+back_norm_1_ind_2 <- function(df1) {
+  gsub_df1 <- df1 %>%
+    ungroup () %>%
+    filter(subpool != 'control') %>%
+    mutate(
+      name = gsub('Smith R. Vista chr9:83712599-83712766', 'v chr9', name),
+      name = gsub('Vista Chr5:88673410-88674494', 'v chr5', name),
+      name = gsub('scramble pGL4.29 Promega 1-63 \\+ 1-87', 's pGl4', name)
+    ) %>%
+    mutate(background = name) %>%
+    mutate(background = str_sub(background, 
+                                nchar(background)-5, 
+                                nchar(background)
+                                )
+           )
+  backgrounds <- gsub_df1 %>%
+    filter(startsWith(name,
+                      'subpool5_no_site_no_site_no_site_no_site_no_site_no_site')
+           ) %>%
+    select(background, sum_0A, sum_0B, sum_25A, sum_25B) %>%
+    rename(sum_0A_back = sum_0A) %>%
+    rename(sum_0B_back = sum_0B) %>%
+    rename(sum_25A_back = sum_25A) %>%
+    rename(sum_25B_back = sum_25B)
+  back_join_norm <- left_join(gsub_df1, backgrounds, by = 'background') %>%
+    mutate(sum_0A_norm = sum_0A/sum_0A_back) %>%
+    mutate(sum_0B_norm = sum_0B/sum_0B_back) %>%
+    mutate(sum_25A_norm = sum_25A/sum_25A_back) %>%
+    mutate(sum_25B_norm = sum_25B/sum_25B_back) %>%
+    mutate(ave_sum_0_norm = (sum_0A_norm + sum_0B_norm)/2) %>%
+    mutate(ave_sum_25_norm = (sum_25A_norm + sum_25B_norm)/2) %>%
+    mutate(induction = ave_sum_25_norm/ave_sum_0_norm)
 }
 
-log_rep_1_2 <- var_log(rep_1_2)
+rep_1_2_back_norm <- back_norm_1_ind_2(rep_1_2)
+
+
+#Log transform df then average barcodes in each biological replicate
+
+var_log2 <- function(df) {
+  log_ratio_df <- df %>% 
+    mutate_if(is.double, 
+              funs(log2(.))
+    )
+  return(log_ratio_df)
+}
+
+var_log10 <- function(df) {
+  log_ratio_df <- df %>% 
+    mutate_if(is.double, 
+              funs(log2(.))
+    )
+  return(log_ratio_df)
+}
+
+log2_rep_1_2_back_norm <- var_log2(rep_1_2_back_norm) %>%
+  mutate(ave_barcodes_0 = (barcodes_0A + barcodes_0B)/2) %>%
+  mutate(ave_barcodes_25 = (barcodes_25A + barcodes_25B)/2)
   
 
-#Subpool manipulations using expression from sum-----------------------
-
-#Separate average variant values into subpools
-subpool2 <- 
-  filter(rep_1_2, subpool == "subpool2") %>%
-  ungroup () %>%
-  select(-subpool)
-subpool3 <- 
-  filter(rep_1_2, subpool == "subpool3") %>%
-  ungroup () %>%
-  select(-subpool)
-subpool4 <- 
-  filter(rep_1_2, subpool == "subpool4") %>%
-  ungroup () %>%
-  select(-subpool)
-subpool5 <- 
-  filter(rep_1_2, subpool == "subpool5") %>%
-  ungroup () %>%
-  select(-subpool)
-controls <- 
-  filter(rep_1_2, subpool == "control") %>%
-  ungroup ()
+#Subpool manipulations using expression from sum--------------------------------
 
 #Separate string qualifiers per subpool
 
-#Subpool 2 contains either a consensus site (TGACGTCA) or consensus 
-#surrounded by 2 bp flanks on either side (ATTGACGTCAGC) as is used in the
-#rest of the subpools. Each site is placed on the background starting 
-#closest to minP and are then moved along the backgrounds at 1 bp 
-#increments. Separation lists the type of site, the distance (start of 
-#consensus or consensus and flanks) and the background used. Added 2 bp to
-#consensusflank so that the start of the binding site is represented
-#instead of the start of the flank
-sep_2 <- separate(
-  subpool2, name, into = c(
-    "subpool", "site", "fluff2", "dist", "background"
-    ), sep = "_", convert = TRUE
-  ) %>% 
-  select(-fluff2) %>%
-  mutate(background = gsub('Smith R. Vista chr9:83712599-83712766',
-                           'vista chr9', background),
-         background = gsub('Vista Chr5:88673410-88674494', 'vista chr5',
-                           background),
-         background = str_sub(background, 1, 13)) %>%
-  mutate(dist = 
-           ifelse(startsWith(site, 'consensusflank'), 
-                  dist + 2, dist))
+#Subpool 2 contains either a consensus site (TGACGTCA) or consensus surrounded 
+#by 2 bp flanks on either side (ATTGACGTCAGC) as is used in the rest of the 
+#subpools. Each site is placed on the background starting closest to minP and 
+#are then moved along the backgrounds at 1 bp increments. Separation lists the 
+#type of site, the distance (start of the consensus site) and the background 
+#used. Added 2 bp to consensusflank so that the start of the binding site is 
+#represented instead of the start of the flank
 
-#Subpool 3 contains 2 consensus binding sites with flanks (ATTGACGTCAGC) 
-#that vary in distance from one another by 0 (no inner flanks), 5, 10, 15,
-#20 and 70 bp (all but 0 appear as -4 bp spacing). Each site distance 
-#combination is then moved along the backgrounds at 1 bp increments 
-#starting from closest to the minP. Separation lists the spacing between 
-#sites, distance (start of consensus and flanks) and the background. Added
-#2 to all distances to measure to start of BS and not to flank. Added 4 
-#to all spacing but 0 to measure difference between start of sites.
-sep_3 <-subpool3 %>% 
+subpool2 <- 
+  filter(log2_rep_1_2_back_norm, subpool == "subpool2") %>%
+  ungroup() %>%
+  ungroup () %>%
+  select(-subpool) %>%
+  separate(name, into = c("fluff1", "site", "fluff2", "dist", "fluff3"),
+           sep = "_", convert = TRUE
+           ) %>% 
+  select(-fluff1, -fluff2, -fluff3) %>%
+  mutate(dist = 
+           ifelse(startsWith(site, 'consensusflank'), dist + 2, dist))
+
+#Subpool 3 contains 2 consensus binding sites with flanks (ATTGACGTCAGC) that 
+#vary in distance from one another by 0 (no inner flanks), 5, 10, 15, 20 and 70 
+#bp (all but 0 appear as -4 bp spacing). Each site distance combination is then 
+#moved along the backgrounds at 1 bp increments starting from closest to the 
+#minP. Separation lists the spacing between sites, distance (start of consensus)
+#and the background. Added 2 to all distances to measure the start of BS and not 
+#to flank. Added 4 to all spacing but 0 to include flank spaces.
+
+subpool3 <- 
+  filter(log2_rep_1_2_back_norm, subpool == "subpool3") %>%
+  ungroup () %>%
+  select(-subpool) %>%
   mutate(name = gsub('2BS ', '', name), 
          name = gsub(' bp spacing ', '_', name)) %>%
-  separate(name, into = c(
-    "subpool", "spacing", "fluff2", "fluff3", "dist", "background"
-    ), sep = "_", convert = TRUE
+  separate(name, 
+           into = c("subpool", "spacing", "fluff2", "fluff3", "dist", "fluff4"),
+           sep = "_", convert = TRUE
   ) %>%
-  select(-fluff2, -fluff3) %>%
-  mutate(background = gsub('Smith R. Vista chr9:83712599-83712766',
-                           'vista chr9', background),
-         background = gsub('Vista Chr5:88673410-88674494', 'vista chr5',
-                           background),
-         background = str_sub(background, 1, 13)) %>%
-  mutate(dist = dist + 2) %>%
+  select(-subpool, -fluff2, -fluff3, -fluff4) %>%
+  mutate(dist = as.integer(dist + 2)) %>%
   mutate(spacing = 
            ifelse(spacing != as.integer(0), 
-                  spacing + 4, spacing))
+                  as.integer(spacing + 4), as.integer(spacing))) 
 
 
-#Subpool 4 contains 2 binding sites with flanks that vary in site type 
-#from consensus (ATTGACGTCAGC) moderate (ATTGACGTCTGC) weak (ATTGAAGTCAGC) 
-#and half(NNNGCCGTCATA). These sites vary in spacing from 0, 5, 10, 15, 
-#and 20 bp. Both sites are moved along the promoter at 5 bp increments 
-#starting closest to minP. The order of sites in the name is from further
-#to closer to the minP and distance is from the closer site to 0. 
-#Separation lists the first and second site, the spacing between sites, 
-#distance (start of site) and the background.
-sep_4 <- subpool4 %>%
+#Subpool 4 contains 2 binding sites with flanks that vary in site type from 
+#consensus (ATTGACGTCAGC) moderate (ATTGACGTCTGC) weak (ATTGAAGTCAGC) and 
+#half(NNNGCCGTCATA). These sites vary in spacing from 0, 5, 10, 15, and 20 bp. 
+#Both sites are moved along the promoter at 5 bp increments starting closest to 
+#minP. The order of sites in the name is from further to closer to the minP and 
+#distance is from the end of the oligo to the site closer to the proximal 
+#promoter. 
+
+subpool4 <- 
+  filter(log2_rep_1_2_back_norm, subpool == "subpool4") %>%
+  ungroup () %>%
+  select(-subpool) %>%
   mutate(name = gsub('consensus0 ', 'consensus_0', name),
          name = gsub('weak0 ', 'weak_0', name),
          name = gsub('moderate0 ', 'moderate_0', name),
          name = gsub('half0 ', 'half_0', name),
          name = gsub('bp spacing', '', name)) %>%
-  separate(name, into = c(
-    "subpool", "site1", "site2", "spacing", "fluff2", "dist", "background"
-  ), sep = "_", convert = TRUE
-  ) %>%
-  select(-fluff2) %>%
-  mutate(consensus = str_detect(site1, "consensus") + 
-           str_detect(site2, "consensus")) %>%
-  mutate(moderate = str_detect(site1, "moderate") + 
-           str_detect(site2, "moderate")) %>%
-  mutate(weak = str_detect(site1, "weak") + 
-     str_detect(site2, "weak")) %>%
-  mutate(half = str_detect(site1, "half") + 
-           str_detect(site2, "half")) %>%
-  mutate(background = gsub('Smith R. Vista chr9:83712599-83712766',
-                           'vista chr9', background),
-         background = gsub('Vista Chr5:88673410-88674494', 'vista chr5',
-                           background),
-         background = str_sub(background, 1, 13)) %>%
+  separate(name, 
+           into = c("subpool", "site1", "site2", "spacing", "fluff1", "dist", 
+                    "fluff2"), 
+           sep = "_", convert = TRUE
+           ) %>%
+  select(-subpool, -fluff1, -fluff2) %>%
+  mutate(consensus = str_detect(site1, 
+                                "consensus") + str_detect(site2, 
+                                                          "consensus")) %>%
+  mutate(moderate = str_detect(site1, 
+                               "moderate") + str_detect(site2, 
+                                                        "moderate")) %>%
+  mutate(weak = str_detect(site1, 
+                           "weak") + str_detect(site2, 
+                                                "weak")) %>%
+  mutate(half = str_detect(site1, 
+                           "half") + str_detect(site2, 
+                                                "half")) %>%
   mutate(dist = dist + 2) %>%
-  mutate(spacing = 
-           ifelse(spacing != as.integer(0), 
-                  spacing + 4, spacing))
+  mutate(spacing = ifelse(spacing != as.integer(0), spacing + 4, spacing))
 
-#Subpool 5 contains 6 equally spaced sites spaced 13 bp apart and starting
-#from furthest to the minP. These sites are filled with sites of either the
-#consensus site, a weak site or no site. Both the weak and consensus sites
-#are flanked by the same flanking sequence.
-sep_5 <- subpool5 %>%
+#Subpool 5 contains 6 equally spaced sites spaced 13 bp apart and starting from 
+#furthest to the minP. These sites are filled with sites of either the consensus
+#site, a weak site or no site. Both the weak and consensus sites have the same 
+#flanking sequence.
+
+subpool5 <- 
+  filter(log2_rep_1_2_back_norm, subpool == "subpool5") %>%
+  ungroup () %>%
+  select(-subpool) %>%
   mutate(name = gsub('no_site', 'nosite', name)) %>%
   separate(name, into = c(
     "subpool", "site1", "site2", "site3", "site4", "site5", "site6", 
-    "background"), sep = "_"
+    "fluff"), sep = "_"
   ) %>%
+  select(-subpool, -fluff) %>%
   mutate(consensus = str_detect(site1, "consensus") + 
            str_detect(site2, "consensus") + 
            str_detect(site3, "consensus") + 
@@ -304,35 +305,29 @@ sep_5 <- subpool5 %>%
            str_detect(site5, "nosite") +
            str_detect(site6, "nosite")) %>%
   mutate(total_sites = consensus + weak) %>%
-  mutate(background = gsub('Smith R. Vista chr9:83712599-83712766',
-                           'vista chr9', background),
-         background = gsub('Vista Chr5:88673410-88674494', 'vista chr5',
-                           background),
-         background = str_sub(background, 1, 13))
+  mutate(site_combo = 
+           ifelse(weak == 0 & consensus > 0, 
+                  'consensus', 'mixed')) %>%
+  mutate(site_type = 
+           ifelse(consensus == 0 & weak > 0, 
+                  'weak', site_combo))
 
-ave_site_5 <- sep_5 %>%
-  group_by(background, consensus, weak) %>%
-  summarize(ave_site_induction = mean(ave_induction), 
-            ave_site_25 = mean(ave_ratio_25),
-            ave_site_0 = mean(ave_ratio_0))
+#Controls
 
-#model fitting to subpool 5
-sep_5_chr9 <- sep_5 %>%
-  filter(background == 'vista chr9')
+controls <- 
+  filter(rep_1_2, subpool == "control") %>%
+  ungroup() %>%
+  mutate(ave_ratio_0 = (ratio_0A + ratio_0B)/2) %>%
+  mutate(ave_ratio_25 = (ratio_25A + ratio_25B)/2) %>%
+  mutate(induction = ave_ratio_25/ave_ratio_0) %>%
+  var_log2() %>%
+  mutate(ave_barcodes_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
+  mutate(ave_barcodes_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2)
   
 
 #Replicate plots from summing-------------------------------------------
 
 #Determine pearson and plot a lot of replicate graphs
-rep_1_2_ratio_0_R2 <- cor(log_rep_1_2$log_ratio_0_1 ,
-                              log_rep_1_2$log_ratio_0_2,
-                              use = "pairwise.complete.obs",
-                              method = "pearson")
-
-rep_1_2_ratio_25_R2 <- cor(log_rep_1_2$log_ratio_25_1 ,
-                            log_rep_1_2$log_ratio_25_2,
-                            use = "pairwise.complete.obs",
-                            method = "pearson")
 
 rep_1_2_25_BCnum_R2 <- cor(rep_1_2$barcodes_RNA_25_1, 
                          rep_1_2$barcodes_RNA_25_2,
@@ -344,43 +339,14 @@ rep_1_2_0_BCnum_R2 <- cor(rep_1_2$barcodes_RNA_0_1,
                            use = "pairwise.complete.obs",
                            method = "pearson")
 
-p_0_var_rep <- ggplot(NULL, aes(log_ratio_0_1, 
-                                           log_ratio_0_2)) +
-  geom_point(data = log_rep_1_2, alpha = 0.3) +
-  geom_point(data = filter(log_rep_1_2, 
-                           grepl(
-                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
-                             name)), 
-             color = 'red') +
-  annotation_logticks(scaled = TRUE) +
-  xlab("Variant log10 Expression Rep. 1") +
-  ylab("Variant log10 Expression Rep. 2") +
-  scale_x_continuous(breaks = c(0, 1), limits = c(-0.6, 2.4)) + 
-  scale_y_continuous(breaks = c(0, 1), limits = c(-0.6, 2.4)) + 
-  annotate("text", x = 0, y = 1,
-           label = paste('r =', round(rep_1_2_ratio_0_R2, 2)))
+p_induction_sp <- ggplot(log2_rep_1_2_back_norm, aes(induction)) +
+  facet_grid(. ~ subpool) +
+  geom_density(kernel = 'gaussian') +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE, sides = 'b') +
+  xlab("Log2 induction of background normalized reads")
 
-save_plot('plots/0_var_rep_neg.png',
-          base_aspect_ratio = 1, p_0_var_rep)
-
-p_25_var_rep <- ggplot(NULL, 
-                        aes(log_ratio_25_1, log_ratio_25_2)) + 
-  geom_point(data = log_rep_1_2, alpha = 0.3) +
-  geom_point(data = filter(log_rep_1_2, 
-                           grepl(
-                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
-                             name)), 
-             color = 'red') +
-  scale_x_continuous(breaks = c(0, 1, 2), limits = c(-0.6, 2.4)) + 
-  scale_y_continuous(breaks = c(0, 1, 2), limits = c(-0.6, 2.4)) +
-  annotation_logticks() +
-  xlab("Variant log10 Expression Rep. 1") + 
-  ylab("Variant log10 Expression Rep. 2") +
-  annotate("text", x = 0, y = 1,
-           label = paste('r =', round(rep_1_2_ratio_25_R2, 2)))
-
-save_plot('plots/ind_var_rep_neg.png',
-          base_aspect_ratio = 1, p_25_var_rep)
+#Check these plots or make new ones
 
 p_0_bc_var <- ggplot(ave_variant, aes(ave_barcodes_0, 
                                           ave_ratio_0)) +
@@ -434,38 +400,70 @@ p_bc_rep_25 <- ggplot(
 save_plot('plots/bc_rep_25.png',
           p_bc_rep_25)
 
-#Plot reads per BC, filtering out 0 reads that skew plot
-sample_11 <- filter(bc_join_DNA, num_reads > 0)
-sample_02 <- filter(bc_join_R25A, num_reads > 0)
-sample_03 <- filter(bc_join_R25B, num_reads > 0)
-sample_04 <- filter(bc_join_R0A, num_reads > 0)
-sample_05 <- filter(bc_join_R0B, num_reads > 0)
 
-p_BC_num_reads_viol_full <- ggplot(NULL, aes(x = "", y = num_reads)) +
-  geom_violin(data = sample_11, aes(x = "DNA")) +
-  geom_violin(data = sample_02, aes(x = "Ind_1")) + 
-  geom_violin(data = sample_03, aes(x = "Ind_2")) +
-  geom_violin(data = sample_04, aes(x = "0_1")) + 
-  geom_violin(data = sample_05, aes(x = "0_2")) + 
+#Barcode analysis--------------------------------------------------------------
+
+#Plot reads per BC
+sample_DNA <- filter(bc_join_DNA, num_reads > 0)
+sample_R0A <- filter(bc_join_R0A, num_reads > 0)
+sample_R0B <- filter(bc_join_R0B, num_reads > 0)
+sample_R25A <- filter(bc_join_R25A, num_reads > 0)
+sample_R25B <- filter(bc_join_R25B, num_reads > 0)
+
+p_BC_num_reads_viol_full <- ggplot(NULL, 
+                                   aes(x = "", 
+                                       y = num_reads, 
+                                       color = subpool
+                                       )
+                                   ) +
+  geom_violin(data = sample_DNA, aes(x = "DNA")) +
+  geom_violin(data = sample_R0A, aes(x = "R0A")) + 
+  geom_violin(data = sample_R0B, aes(x = "R0B")) +
+  geom_violin(data = sample_R25A, aes(x = "R25A")) + 
+  geom_violin(data = sample_R25B, aes(x = "R25B")) + 
   xlab("") +
-  ylab("Reads")
+  ylab("Reads per barcode")
 
-save_plot('plots/BC_num_reads_viol_full.png',
-          p_BC_num_reads_viol_full)
+save_plot('plots/BC_num_reads_viol_full.png', p_BC_num_reads_viol_full)
 
-p_BC_num_reads_box_zoom <- ggplot(NULL, aes(x = "", y = num_reads)) +
-  geom_boxplot(data = sample_11, aes(x = "DNA"), alpha = 0.1) +
-  geom_boxplot(data = sample_02, aes(x = "Ind_1"), alpha = 0.1) + 
-  geom_boxplot(data = sample_03, aes(x = "Ind_2"), alpha = 0.1) +
-  geom_boxplot(data = sample_04, aes(x = "0_1"), alpha = 0.1) + 
-  geom_boxplot(data = sample_05, aes(x = "0_2"), alpha = 0.1) + 
+p_BC_num_reads_box_zoom <- ggplot(NULL, 
+                                  aes(x = "", 
+                                      y = num_reads, 
+                                      color = subpool
+                                      )
+                                  ) +
+  geom_boxplot(data = sample_DNA, aes(x = "DNA")) +
+  geom_boxplot(data = sample_R0A, aes(x = "R0A")) + 
+  geom_boxplot(data = sample_R0B, aes(x = "R0B")) +
+  geom_boxplot(data = sample_R25A, aes(x = "R25A")) + 
+  geom_boxplot(data = sample_R25B, aes(x = "R25B")) + 
   xlab("") +
-  ylab("Reads") + ylim(0, 25)
+  ylab("Reads per barcode") + 
+  ylim(0, 25)
 
-save_plot('plots/BC_num_reads_box_zoom.png',
-          p_BC_num_reads_box_zoom)
+save_plot('plots/BC_num_reads_box_zoom.png', p_BC_num_reads_box_zoom)
 
-#checking negatives relative to library expression
+p_BC_per_variant <- ggplot(rep_1_2, 
+                           aes(x = "", 
+                               y = num_reads, 
+                               color = subpool
+                               )
+                           ) +
+  geom_boxplot(aes(x = "DNA", y = barcodes_DNA)) +
+  geom_boxplot(aes(x = "R0A", y = barcodes_RNA_0A)) + 
+  geom_boxplot(aes(x = "R0B", y = barcodes_RNA_0B)) + 
+  geom_boxplot(aes(x = "R25A", y = barcodes_RNA_25A)) + 
+  geom_boxplot(aes(x = "R25B", y = barcodes_RNA_25B)) + 
+  xlab("") +
+  ylab("Barcodes per variant") +
+  background_grid(major = c('y'), minor = c('y')) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot('plots/BC_per_variant.png', p_BC_per_variant)
+
+
+#Control analysis---------------------------------------------------------------
+
 p_contr_25_induction <- ggplot(filter(controls, ave_ratio_25 < 20), 
                                 aes(ave_ratio_0, ave_ratio_25)) +
   geom_point(alpha = 0.7) + xlim(0,2) + ylim(0,5) +
@@ -478,17 +476,6 @@ p_contr_25_induction <- ggplot(filter(controls, ave_ratio_25 < 20),
 save_plot('plots/contr_25_induction.png',
           p_contr_25_induction)
 
-#Selecting high uninduced high induction for Rishi
-arrange(ave_variant, desc(ave_induction)) %>%
-  head(1) %>%
-  ungroup %>%
-  select(name, most_common, ave_ratio_0, ave_induction) %>%
-  write.table(
-    "highunind_highinduction.txt", 
-    sep = '\t', row.names = FALSE)
-
-reportcomp <- filter(log_rep_1_2, 
-                     name == 'subpool5_weak_consensus_consensus_consensus_consensus_consensus_Vista Chr5:88673410-88674494' | name == 'pGL4.29 Promega 1-63 + 1-87' | name == 'pGL4.29 Promega 1-87')
 
 #Comparing to integrated luciferase assays
 luc_comp_seq <- filter(ave_variant, 
@@ -1079,7 +1066,378 @@ save_plot('plots/med_sum_25_neg.png',
           base_width = 12, base_height = 8)
 
 
+#Normalizing RNA reads to DNA---------------------------------------------------
+
+#combine DNA and RNA cumm. BC counts, only keeping instances in both sets and 
+#determining RNA/DNA per variant. Ratio is summed normalized reads of RNA over 
+#summed normalized reads DNA
+
+var_expression <- function(df1, df2) {
+  RNA_DNA <- inner_join(df1, df2, 
+                        by = c("name", "subpool", "most_common"), 
+                        suffix = c("_RNA", "_DNA")
+  ) %>%
+    mutate(ratio = sum_RNA / sum_DNA)
+  print('x defined as RNA, y defined as DNA in var_expression(x,y)')
+  return(RNA_DNA)
+}
+
+RNA_DNA_R25A <- var_expression(variant_counts_R25A, variant_counts_DNA)
+RNA_DNA_R25B <- var_expression(variant_counts_R25B, variant_counts_DNA)
+RNA_DNA_R0A <- var_expression(variant_counts_R0A, variant_counts_DNA)
+RNA_DNA_R0B <- var_expression(variant_counts_R0B, variant_counts_DNA)
+
+#Combine biological replicates
+
+var_rep_ratio <- function(df0A, df0B, df25A, df25B) {
+  join_0 <- inner_join(df0A, df0B, 
+                       by = c(
+                         "name", "subpool", "most_common", "sum_DNA", 
+                         "barcodes_DNA"), 
+                       suffix = c("_0A", "_0B")
+  )
+  join_25 <- inner_join(df25A, df25B, 
+                        by = c(
+                          "name", "subpool", "most_common", "sum_DNA", 
+                          "barcodes_DNA"), 
+                        suffix = c("_25A", "_25B")
+  )
+  join_0_25 <- inner_join(join_0, join_25,
+                          by = c("name", "subpool", "most_common", "sum_DNA", 
+                                 "barcodes_DNA")
+  )
+  print('processed dfs in order: df0A, df0B, df25A, df25B')
+  return(join_0_25)
+}
+
+rep_1_2_ratio <- var_rep(RNA_DNA_R0A, RNA_DNA_R0B, RNA_DNA_R25A, RNA_DNA_R25B)
+
+#Normalize to background
+
+back_norm_1_ind_2 <- function(df1) {
+  gsub_df1 <- df1 %>%
+    ungroup () %>%
+    filter(subpool != 'control') %>%
+    mutate(
+      name = gsub('Smith R. Vista chr9:83712599-83712766', 'v chr9', name),
+      name = gsub('Vista Chr5:88673410-88674494', 'v chr5', name),
+      name = gsub('scramble pGL4.29 Promega 1-63 \\+ 1-87', 's pGl4', name)
+    ) %>%
+    mutate(background = name) %>%
+    mutate(background = str_sub(background, 
+                                nchar(background)-5, 
+                                nchar(background)
+    )
+    )
+  backgrounds <- gsub_df1 %>%
+    filter(startsWith(name,
+                      'subpool5_no_site_no_site_no_site_no_site_no_site_no_site')
+    ) %>%
+    select(background, ratio_0A, ratio_0B, ratio_25A, ratio_25B) %>%
+    rename(ratio_0A_back = ratio_0A) %>%
+    rename(ratio_0B_back = ratio_0B) %>%
+    rename(ratio_25A_back = ratio_25A) %>%
+    rename(ratio_25B_back = ratio_25B)
+  back_join_norm <- left_join(gsub_df1, backgrounds, by = 'background') %>%
+    mutate(ratio_0A_norm = ratio_0A/ratio_0A_back) %>%
+    mutate(ratio_0B_norm = ratio_0B/ratio_0B_back) %>%
+    mutate(ratio_25A_norm = ratio_25A/ratio_25A_back) %>%
+    mutate(ratio_25B_norm = ratio_25B/ratio_25B_back) %>%
+    mutate(ave_ratio_0_norm = (ratio_0A_norm + ratio_0B_norm)/2) %>%
+    mutate(ave_ratio_25_norm = (ratio_25A_norm + ratio_25B_norm)/2) %>%
+    mutate(induction = ave_ratio_25_norm/ave_ratio_0_norm)
+}
+
+rep_1_2_ratio_back_norm <- back_norm_1_ind_2(rep_1_2_ratio)
+
+log2_rep_1_2_ratio_back_norm <- var_log2(rep_1_2_ratio_back_norm) %>%
+  mutate(ave_barcodes_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
+  mutate(ave_barcodes_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2)
+
+log10_rep_1_2_ratio_back_norm <- var_log10(rep_1_2_ratio_back_norm) %>%
+  mutate(ave_barcodes_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
+  mutate(ave_barcodes_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2)
+
+
+#Replicate plots normalizing RNA reads to DNA-----------------------------------
+
+p_rep_1_2_0_sp <- ggplot(NULL, aes(ratio_0A_norm, ratio_0B_norm)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.5) +
+  geom_density2d(data = log10_rep_1_2_ratio_back_norm, 
+                 alpha = 0.7, color = 'black', size = 0.2, bins = 10
+  ) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 variant norm.\nsum RNA/DNA BR 1") +
+  ylab("log10 variant norm.\nsum RNA/DNA BR 2") +
+  scale_x_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7)) + 
+  scale_y_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7))
+
+p_rep_1_2_25_sp <- ggplot(NULL, aes(ratio_25A_norm, ratio_25B_norm)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.5) +
+  geom_density2d(data = log10_rep_1_2_ratio_back_norm, 
+                 alpha = 0.7, color = 'black', size = 0.2, bins = 10
+  ) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 variant norm.\nsum RNA/DNA BR 1") +
+  ylab("log10 variant norm.\nsum RNA/DNA BR 2") +
+  scale_x_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7)) + 
+  scale_y_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7))
+
+p_rep_sp_1_2 <- plot_grid(p_rep_1_2_0_sp, p_rep_1_2_25_sp, nrow = 2,
+                          labels = c(' 0 µM', '25 µM'), align = 'v', 
+                          hjust = -3, vjust = -1, scale = 0.9)
+
+save_plot('plots/p_rep_sp_1_2.png', p_rep_sp_1_2, 
+          base_width = 8, base_height = 6)
+
+
+p_rep_1_2_0 <- ggplot(NULL, aes(ratio_0A_norm, ratio_0B_norm)) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.1) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.2) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.2) +
+  geom_density2d(data = log10_rep_1_2_ratio_back_norm, 
+                 alpha = 0.7, color = 'black', size = 0.2, bins = 10
+  ) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, 
+                           grepl(
+                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
+                             name)), 
+             color = 'red', alpha = 0.7) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 variant norm.\nsum RNA/DNA BR 1") +
+  ylab("log10 variant norm.\nsum RNA/DNA BR 2") +
+  scale_x_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7)) + 
+  scale_y_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7)) + 
+  annotate("text", x = 0, y = 7,
+           label = paste('r =', 
+                         round(cor(log10_rep_1_2_ratio_back_norm$ratio_0A_norm,
+                                   log10_rep_1_2_ratio_back_norm$ratio_0B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 
+                               2))) +
+  annotate("text", x = 0, y = 6, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool5')$ratio_0A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool5')$ratio_0B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0, y = 5, color = '#33638DFF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool3')$ratio_0A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool3')$ratio_0B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0, y = 4, color = '#29AF7FFF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool4')$ratio_0A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool4')$ratio_0B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0, y = 3, color = '#DCE319FF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool2')$ratio_0A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool2')$ratio_0B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
+
+save_plot('plots/p_rep_1_2_0.png', p_rep_1_2_0)
+
+p_rep_1_2_25 <- ggplot(NULL, aes(ratio_25A_norm, ratio_25B_norm)) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.1) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.5) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.2) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.2) +
+  geom_density2d(data = log10_rep_1_2_ratio_back_norm, 
+                 alpha = 0.7, color = 'black', size = 0.2, bins = 10
+  ) +
+  geom_point(data = filter(log10_rep_1_2_ratio_back_norm, 
+                           grepl(
+                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
+                             name)), 
+             color = 'red', alpha = 0.7) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 variant norm.\nsum RNA/DNA BR 1") +
+  ylab("log10 variant norm.\nsum RNA/DNA BR 2") +
+  scale_x_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7)) + 
+  scale_y_continuous(breaks = c(-1, 0, 1, 2, 3, 4, 5, 6, 7), 
+                     limits = c(-1.5, 7)) + 
+  annotate("text", x = 0, y = 7,
+           label = paste('r =', 
+                         round(cor(log10_rep_1_2_ratio_back_norm$ratio_25A_norm,
+                                   log10_rep_1_2_ratio_back_norm$ratio_25B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 
+                               2))) +
+  annotate("text", x = 0, y = 6, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool5')$ratio_25A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool5')$ratio_25B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0, y = 5, color = '#33638DFF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool3')$ratio_25A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool3')$ratio_25B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0, y = 4, color = '#29AF7FFF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool4')$ratio_25A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool4')$ratio_25B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0, y = 3, color = '#DCE319FF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool2')$ratio_25A_norm,
+                                   filter(log10_rep_1_2_ratio_back_norm, 
+                                          subpool == 'subpool2')$ratio_25B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
+
+save_plot('plots/p_rep_1_2_25.png', p_rep_1_2_25)
+
+
+#Determining subpool bias-------------------------------------------------------
+
+#Compare expression of sequences shared between subpool 2 and 5 at both 0 and 25
+#µM forksolin. This analysis was done on data normalized to background
+#expression levels to show the disparity between relative subpool expression
+#that may result from the DNA ratios not representing biological ratios between
+#the subpools. For this use data normalized to background and not log
+#transformed.
+
+compare_2_5 <- inner_join(subpool2, subpool5, 
+                   by = c('most_common', 'background', 'sum_0A_back', 
+                          'sum_0B_back', 'sum_25A_back', 'sum_25B_back'),
+                   suffix = c('_sp2', '_sp5'))
+
+p_compare_back_norm_2_5_induction <- ggplot(compare_2_5, 
+                                    aes(induction_sp2, induction_sp5)
+                                    ) +
+  geom_point() +
+  geom_hline(yintercept = 1, alpha = 0.5) +
+  geom_vline(xintercept = 1, alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0) +
+  xlab("Subpool2 log2 induction of background normalized reads") +
+  ylab("Subpool5 log2 induction of background normalized reads")
+
+p_compare_back_norm_2_5_0 <- ggplot(compare_2_5, 
+                                    aes(ave_ratio_0_norm_sp2, 
+                                        ave_ratio_0_norm_sp5)
+                                    ) +
+  geom_point() +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0) +
+  xlab("Subpool2 average variant\nnorm. sum RNA/DNA") +
+  ylab("Subpool5 average variant\nnorm. sum RNA/DNA") +
+  scale_x_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5), 
+                     limits = c(0, 2.5)) + 
+  scale_y_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5), 
+                     limits = c(0, 2.5))
+
+p_compare_back_norm_2_5_25 <- ggplot(compare_2_5, 
+                                     aes(ave_ratio_25_norm_sp2, 
+                                         ave_ratio_25_norm_sp5))+
+  geom_point() +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0) +
+  xlab("Subpool2 average variant\nnorm. sum RNA/DNA") +
+  ylab("Subpool5 average variant\nnorm. sum RNA/DNA") +
+  scale_x_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5), 
+                     limits = c(0, 2.5)) + 
+  scale_y_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5), 
+                     limits = c(0, 2.5))
+
+p_compare_back_norm_2_5 <- plot_grid(p_compare_back_norm_2_5_0, 
+                                     p_compare_back_norm_2_5_25, 
+                                     nrow = 2, labels = c(' 0 µM', '25 µM'),
+                                     align = 'v', hjust = -2.5)
+
+save_plot('plots/p_compare_back_norm_2_5.png', p_compare_back_norm_2_5,
+          base_height = 7, base_width = 4)
+
+data_0 <- tibble(ave_ratio_0_norm_sp2 = 0:3, ave_ratio_0_norm_sp5 = 0:3)
+data_25 <- tibble(ave_ratio_25_norm_sp2 = 0:3, ave_ratio_25_norm_sp5 = 0:3)
+
+mod_0 <- lm(ave_ratio_0_norm_sp5 ~ ave_ratio_0_norm_sp2, data_0)
+mod_25 <- lm(ave_ratio_25_norm_sp5 ~ ave_ratio_25_norm_sp2, data_25)
+
+compare_2_5_res <- compare_2_5 %>%
+  add_residuals(mod_0) %>%
+  rename(resid_0 = resid) %>%
+  add_residuals(mod_25) %>%
+  rename(resid_25 = resid)
+
+p_compare_back_norm_2_5_0_res <- ggplot(compare_2_5_res, aes(x = most_common)) +
+  geom_point(aes(y = resid_0), color = 'black') +
+  geom_point(aes(y = resid_25), color = 'red')
+
+
 #Selecting variants for luciferase assay--------------------------------------
+
 sep_5_log <- sep_5 %>%
   mutate(ave_log_ratio_25 = (log10(ratio_25_1) + log10(ratio_25_2))/2) %>%
   mutate(ave_log_ratio_0 = (log10(ratio_0_2) + log10(ratio_0_2))/2)
@@ -1159,7 +1517,23 @@ test <- inner_join(bc_join_R25A, bc_join_DNA,
   summarize(med_BC_expression = median(BC_expression))
 
 
+#Random work--------------------------------------------------------------------
+
+#Selecting high uninduced high induction for Rishi
+arrange(ave_variant, desc(ave_induction)) %>%
+  head(1) %>%
+  ungroup %>%
+  select(name, most_common, ave_ratio_0, ave_induction) %>%
+  write.table(
+    "highunind_highinduction.txt", 
+    sep = '\t', row.names = FALSE)
+
+reportcomp <- filter(log_rep_1_2, 
+                     name == 'subpool5_weak_consensus_consensus_consensus_consensus_consensus_Vista Chr5:88673410-88674494' | name == 'pGL4.29 Promega 1-63 + 1-87' | name == 'pGL4.29 Promega 1-87')
+
+
 #Current unfinished code------------------------------------------------
+
 fourier <- sep_2 %>%
   filter(site == "consensus", 
          background == "scramble pGL4.29 Promega 1-63 + 1-87") %>%
