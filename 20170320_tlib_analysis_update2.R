@@ -466,60 +466,6 @@ p_induction_back_compare <- plot_grid(p_induction_noback, p_induction_back,
 save_plot('plots/p_induction_back_compare.png', p_induction_back_compare,
           base_width = 9, base_height = 5)
 
-#Check these plots or make new ones
-
-p_0_bc_var <- ggplot(ave_variant, aes(ave_barcodes_0, 
-                                          ave_ratio_0)) +
-  geom_point(alpha = 0.1) + 
-  xlab("Average Number of Barcodes per Variant") +
-  ylab("Average Expression per Variant") + xlim(0, 702) +
-  facet_wrap( ~ subpool, nrow = 5) + panel_border()
-
-save_plot('plots/0_bc_var.png',
-          p_0_bc_var, scale = 1.7)
-
-p_25_bc_var <- ggplot(ave_variant, aes(ave_barcodes_25, 
-                                        ave_ratio_25)) +
-  geom_point(alpha = 0.1) +
-  xlab("Average Number of Barcodes per Variant") +
-  ylab("Average Expression per Variant") + xlim(0, 702) +
-  facet_wrap( ~ subpool, nrow = 5) + panel_border()
-
-save_plot('plots/ind_bc_var.png',
-          p_25_bc_var, scale = 1.7)
-
-p_bc_rep_0 <- ggplot(
-  rep_1_2, aes(barcodes_RNA_0_1, barcodes_RNA_0_2)
-  ) +
-  geom_point(alpha = 0.1) +
-  geom_density2d() +
-  scale_x_continuous("Number of Barcodes per Variant Rep. 1", 
-                     breaks = seq(from = 0, to = 700, by = 100)) +
-  scale_y_continuous("Number of Barcodes per Variant Rep. 2", 
-                     breaks = seq(from = 0, to = 700, by = 100)) +
-  annotate("text", x = 100, y = 400,
-           label = paste('r =', round(rep_1_2_0_BC_R2, 2)))
-
-save_plot('plots/bc_rep_0.png',
-          p_bc_rep_0)
-
-p_bc_rep_25 <- ggplot(
-  rep_1_2, aes(barcodes_RNA_25_1, barcodes_RNA_25_2)
-  ) +
-  geom_point(alpha = 0.1) +
-  geom_density2d() +
-  scale_x_continuous("Number of Barcodes per Variant Rep. 1", 
-                     breaks = seq(from = 0, to = 700, by = 100), 
-                     limits = c(0, 700)) +
-  scale_y_continuous("Number of Barcodes per Variant Rep. 2",
-                     breaks = seq(from = 0, to = 700, by = 100), 
-                     limits = c(0, 700)) +
-  annotate("text", x = 100, y = 400,
-           label = paste('r =', round(rep_1_2_25_BC_R2, 2)))
-
-save_plot('plots/bc_rep_25.png',
-          p_bc_rep_25)
-
 
 #Barcode analysis--------------------------------------------------------------
 
@@ -782,79 +728,36 @@ save_plot('plots/subpool3_chr9_10_0_25.png',
           scale = 0.3)
 
 #Subpool 5
-p_subpool5_box_induction <- ggplot(sep_5, aes(as.character(consensus), 
-                                       ave_induction)) + 
-  facet_wrap(~ background) + 
-  geom_boxplot() +
+
+p_site_loc_total_site <- ggplot(NULL, aes(x = "", y = induction, 
+                                      color = as.factor(total_sites))) +
+  facet_grid(background ~ .) +
+  geom_boxplot(data = filter(subpool5, weak == 0, site1 == 'consensus'), 
+               aes(x = "site 1")) +
+  geom_boxplot(data = filter(subpool5, weak == 0, site2 == 'consensus'), 
+               aes(x = "site 2")) +
+  geom_boxplot(data = filter(subpool5, weak == 0, site3 == 'consensus'), 
+               aes(x = "site 3")) +
+  geom_boxplot(data = filter(subpool5, weak == 0, site4 == 'consensus'), 
+               aes(x = "site 4")) +
+  geom_boxplot(data = filter(subpool5, weak == 0, site5 == 'consensus'), 
+               aes(x = "site 5")) +
+  geom_boxplot(data = filter(subpool5, weak == 0, site6 == 'consensus'), 
+               aes(x = "site 6")) +
+  ylab("log2 induction") + 
+  panel_border()
+
+p_num_sites_combo_weak_1 <- ggplot(data = filter(subpool5, weak <= 1), 
+                                   aes(x = as.factor(total_sites), 
+                                       y = induction)) +
+  geom_boxplot(aes(color = site_combo)) +
+  facet_grid(background ~ .) + 
   panel_border() +
-  xlab("Number of Consensus Binding Sites") +
-  ylab("Average Induction Ratio")
+  ylab('log2 induction') +
+  xlab('Number of binding sites')
 
-save_plot('plots/subpool5_box_induction.png',
-          p_subpool5_box_induction, scale = 1.2)
-
-#Plot site number vs. induction (counting weak and consensus) and 
-#overlay # of consensus sites
-p_subpool5_cons_weak_sitenum_25 <- ggplot(NULL) + 
-  facet_wrap(~ background) + 
-  geom_point(data = sep_5,
-               aes(total_sites, ave_ratio_25), 
-             alpha = 0.3, color = '#999999') +
-  geom_point(data = filter(sep_5, weak == 0 & consensus >0),
-             aes(consensus, ave_ratio_25), 
-             alpha = 1, color = 'black') +
-  geom_point(data = filter(sep_5, consensus == 0 & weak >0),
-             aes(weak, ave_ratio_25), 
-             alpha = 1, color = '#56B4E9') +
-  panel_border() +
-  xlab("Total Number of Binding Sites") +
-  scale_y_continuous("Expression at 25 µM Forskolin", limits = c(0,250))
-
-save_plot('plots/subpool5_cons_weak_sitenum_25.png',
-          p_subpool5_cons_weak_sitenum_25, scale = 1.2)
-
-p_subpool5_cons_weak_sitenum_0 <- ggplot(NULL) + 
-  facet_wrap(~ background) + 
-  geom_point(data = sep_5,
-             aes(total_sites, ave_ratio_0), 
-             alpha = 0.3, color = '#999999') +
-  geom_point(data = filter(sep_5, weak == 0 & consensus >0),
-             aes(consensus, ave_ratio_0), 
-             alpha = 1, color = 'black') +
-  geom_point(data = filter(sep_5, consensus == 0 & weak >0),
-             aes(weak, ave_ratio_0), 
-             alpha = 1, color = '#56B4E9') +
-  panel_border() +
-  xlab("Total Number of Binding Sites") +
-  scale_y_continuous("Expression")
-
-save_plot('plots/subpool5_cons_weak_sitenum_0.png',
-          p_subpool5_cons_weak_sitenum_0, scale = 1.2)
-
-p_subpool5_weak_sitenum_induction <- ggplot(
-  filter(sep_5, consensus == 0), aes(as.character(total_sites), 
-                                     ave_induction)) + 
-  geom_point(color = '#56B4E9') +
-  facet_wrap(~ background) + 
-  panel_border() +
-  xlab("Number of Weak Sites Only") +
-  ylab("Average Induction Ratio")
-
-save_plot('plots/subpool5_weak_sitenum_induction.png',
-          p_subpool5_weak_sitenum_induction, scale = 1.2)
-
-p_subpool5_box_0_25 <- ggplot(sep_5) + 
-  facet_wrap(~ background) + 
-  geom_boxplot(aes(as.character(consensus), ave_ratio_0), 
-               color = '#999999', show.legend = TRUE) +
-  geom_boxplot(aes(as.character(consensus), ave_ratio_25), 
-               color = '#56B4E9', show.legend = TRUE) +
-  panel_border() + 
-  xlab("Number of Consensus Binding Sites") +
-  ylab("Average Expression")
-
-save_plot('plots/subpool5_box_0_25.png',
-          p_subpool5_box_0_25, scale = 1.2)
+save_plot('plots/p_num_sites_combo_weak_1.png', p_num_sites_combo_weak_1,
+          scale = 1.2)
 
 #Plot change in induction from consensus to weak or no_site starting at
 #all 6 sites being filled with consensus. Do this per background
@@ -928,65 +831,26 @@ save_plot('plots/cond_diff_25_all.png',
 #Median calculations of Expression-----------------------------------------
 
 #Re-do BC normalization to account for pseudocount of 1
-pseudo_bc_join_R25A <- 
-  left_join(barcode_map, bc_R25A, by = "barcode") %>%
-  mutate(num_reads = 
-           if_else(is.na(num_reads),
-                   as.integer(1), as.integer(num_reads + 1))) %>%
-  mutate(normalized = 
-           as.numeric((num_reads * 1000000 * 5.2) / (sum(
-             num_reads)))) %>%
-  mutate(subpool = 
-           ifelse(startsWith(name, 'subpool'), 
-                  substr(name, 1, 8), 'control'))
 
-pseudo_bc_join_R25B <- 
-  left_join(barcode_map, bc_R25B, by = "barcode") %>%
-  mutate(num_reads = 
-           if_else(is.na(num_reads),
-                   as.integer(1), as.integer(num_reads + 1))) %>%
-  mutate(normalized = 
-           as.numeric((num_reads * 1000000 * 5.2) / (sum(
-             num_reads)))) %>%
-  mutate(subpool = 
-           ifelse(startsWith(name, 'subpool'), 
-                  substr(name, 1, 8), 'control'))
+pseudo_bc_map_join_bc <- function(df1, df2) {
+  df2 <- df2 %>%
+    mutate(num_reads = num_reads + 1) %>%
+    mutate(normalized = as.numeric((num_reads * 1000000) / (sum(num_reads))))
+  keep_bc <- left_join(df1, df2, by = 'barcode') %>%
+    mutate(num_reads = if_else(is.na(num_reads),
+                               as.integer(0),
+                               as.integer(num_reads))) %>%
+    mutate(normalized = if_else(is.na(normalized), 
+                                0, 
+                                normalized))
+  return(keep_bc)
+}
 
-pseudo_bc_join_R0A <- 
-  left_join(barcode_map, bc_R0A, by = "barcode") %>%
-  mutate(num_reads = 
-           if_else(is.na(num_reads),
-                   as.integer(1), as.integer(num_reads + 1))) %>%
-  mutate(normalized = 
-           as.numeric((num_reads * 1000000) / (sum(
-             num_reads)))) %>%
-  mutate(subpool = 
-           ifelse(startsWith(name, 'subpool'),
-                  substr(name, 1, 8), 'control'))
-
-pseudo_bc_join_R0B <- 
-  left_join(barcode_map, bc_R0B, by = "barcode") %>%
-  mutate(num_reads = 
-           if_else(is.na(num_reads),
-                   as.integer(1), as.integer(num_reads + 1))) %>%
-  mutate(normalized = 
-           as.numeric((num_reads * 1000000) / (sum(
-             num_reads)))) %>%
-  mutate(subpool = 
-           ifelse(startsWith(name, 'subpool'), 
-                  substr(name, 1, 8), 'control'))
-
-pseudo_bc_join_DNA <- 
-  left_join(barcode_map, bc_DNA, by = "barcode") %>%
-  mutate(num_reads = 
-           if_else(is.na(num_reads),
-                   as.integer(1), as.integer(num_reads + 1))) %>%
-  mutate(normalized = 
-           as.numeric((num_reads * 1000000) / (sum(
-             num_reads)))) %>%
-  mutate(subpool =
-           ifelse(startsWith(name, 'subpool'),
-                  substr(name, 1, 8), 'control'))
+pseudo_bc_join_R0A <- pseudo_bc_map_join_bc(barcode_map, bc_R0A)
+pseudo_bc_join_R0B <- pseudo_bc_map_join_bc(barcode_map, bc_R0B)
+pseudo_bc_join_R25A <- pseudo_bc_map_join_bc(barcode_map, bc_R25A)
+pseudo_bc_join_R25B <- pseudo_bc_map_join_bc(barcode_map, bc_R25B)
+pseudo_bc_join_DNA <- pseudo_bc_map_join_bc(barcode_map, bc_DNA)
 
 #Determine BC expression RNA/DNA then take median BC expression per
 #variant, appending BC numbers
@@ -1410,6 +1274,13 @@ p_rep_sp_1_2 <- plot_grid(p_rep_1_2_0_sp, p_rep_1_2_25_sp, nrow = 2,
 
 save_plot('plots/p_rep_sp_1_2.png', p_rep_sp_1_2, 
           base_width = 8, base_height = 6)
+
+sum_ratio_compare <- inner_join(log2_rep_1_2_back_norm, 
+                                log2_rep_1_2_ratio_back_norm,
+                                by = c('subpool', 'name', 'most_common',
+                                       'background', 'ave_barcodes_0',
+                                       'ave_barcodes_25'),
+                                suffix = c('_sum', '_ratio'))
 
 
 #Determining subpool bias-------------------------------------------------------
