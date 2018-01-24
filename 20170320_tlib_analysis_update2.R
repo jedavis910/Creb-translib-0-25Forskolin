@@ -344,11 +344,11 @@ p_rep_backnorm_ratio_0 <- ggplot(data = NULL,
   annotation_logticks(scaled = TRUE) +
   xlab("log2 background-norm.\nsum RNA/DNA BR 1") +
   ylab("log2 background-norm.\nsum RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(-1:7), limits = c(-1.5, 7)) + 
-  scale_y_continuous(breaks = c(-1:7), limits = c(-1.5, 7)) +
+  scale_x_continuous(breaks = c(-2:7), limits = c(-2, 7)) + 
+  scale_y_continuous(breaks = c(-2:7), limits = c(-2, 7)) +
   background_grid(major = 'xy', minor = 'none') + 
   panel_border() +
-  annotate("text", x = 2, y = 7, color = '#440154FF', 
+  annotate("text", x = 1.6, y = 7, color = '#440154FF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool5')$ratio_0A_norm,
@@ -357,7 +357,7 @@ p_rep_backnorm_ratio_0 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 2, y = 6, color = '#33638DFF', 
+  annotate("text", x = 1.6, y = 6, color = '#33638DFF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool3')$ratio_0A_norm,
@@ -366,7 +366,7 @@ p_rep_backnorm_ratio_0 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 2, y = 5, color = '#29AF7FFF', 
+  annotate("text", x = 1.6, y = 5, color = '#29AF7FFF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool4')$ratio_0A_norm,
@@ -375,7 +375,7 @@ p_rep_backnorm_ratio_0 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 2, y = 4, color = '#DCE319FF', 
+  annotate("text", x = 1.6, y = 4, color = '#DCE319FF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool2')$ratio_0A_norm,
@@ -403,11 +403,11 @@ p_rep_backnorm_ratio_25 <- ggplot(data = NULL,
   annotation_logticks(scaled = TRUE) +
   xlab("log2 background-norm.\nsum RNA/DNA BR 1") +
   ylab("log2 background-norm.\nsum RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(-1:7), limits = c(-1.5, 7)) + 
-  scale_y_continuous(breaks = c(-1:7), limits = c(-1.5, 7)) +
+  scale_x_continuous(breaks = c(-2:7), limits = c(-2, 7)) + 
+  scale_y_continuous(breaks = c(-2:7), limits = c(-2, 7)) +
   background_grid(major = 'xy', minor = 'none') + 
   panel_border() +
-  annotate("text", x = 2, y = 7, color = '#440154FF', 
+  annotate("text", x = 1.6, y = 7, color = '#440154FF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool5')$ratio_25A_norm,
@@ -416,7 +416,7 @@ p_rep_backnorm_ratio_25 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 2, y = 6, color = '#33638DFF', 
+  annotate("text", x = 1.6, y = 6, color = '#33638DFF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool3')$ratio_25A_norm,
@@ -425,7 +425,7 @@ p_rep_backnorm_ratio_25 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 2, y = 5, color = '#29AF7FFF', 
+  annotate("text", x = 1.6, y = 5, color = '#29AF7FFF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool4')$ratio_25A_norm,
@@ -434,7 +434,7 @@ p_rep_backnorm_ratio_25 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 2, y = 4, color = '#DCE319FF', 
+  annotate("text", x = 1.6, y = 4, color = '#DCE319FF', 
            label = paste('r =', 
                          round(cor(filter(log2_rep_1_2_back_norm, 
                                           subpool == 'subpool2')$ratio_25A_norm,
@@ -1016,11 +1016,10 @@ pseudo_bc_join_R25B <- pseudo_bc_map_join_bc(barcode_map, bc_R25B)
 pseudo_bc_join_DNA <- pseudo_bc_map_join_bc(barcode_map, bc_DNA)
 
 
-#Filter DNA reads to avoid including the BC's not likely present in this assay,
-#Join with RNA
+#Filter DNA reads to set a minimum of 3 reads per BC, join with RNA
 
 dna_join_rna <- function(df1, df2) {
-  filter_reads_1 <- filter(df1, num_reads > 1) %>%
+  filter_reads_1 <- filter(df1, num_reads > 3) %>%
     rename(num_reads_DNA = num_reads) %>%
     rename(DNA_norm = norm)
   DNA_RNA_join <- left_join(filter_reads_1, df2,
@@ -1131,67 +1130,127 @@ med_vs_sum_variant <- inner_join(log2_rep_1_2_back_norm, log2_med_rep_1_2_back_n
                                              'most_common', 'background'),
                                       suffix = c('_sum', '_med')) 
 
-p_med_vs_sum_0_rep <- ggplot(med_vs_sum_variant, 
-                             aes(ave_med_ratio_0_norm, 
-                                 ave_ratio_0_norm, 
-                                 color = subpool)) +
-  geom_point(alpha = 0.3) +
-  geom_point(data = filter(
-    med_vs_sum_variant, 
-    grepl('subpool5_no_site_no_site_no_site_no_site_no_site_no_site', 
-    name)), 
-    color = 'red') +
-  annotation_logticks(sides = 'bl') +
-  xlab("log2 background-norm.\nmedian RNA/DNA") +
-  ylab("log2 background-norm.\nsum RNA/DNA") +
-  background_grid(major = 'xy', minor = 'none') +
-  annotate("text", x = 2, y = 2, 
-           label = paste('r =', round(cor(med_vs_sum_variant$ave_med_ratio_0_norm,
-                                          med_vs_sum_variant$ave_ratio_0_norm,
-                                          use = "pairwise.complete.obs", 
-                                          method = "pearson"), 2)))
-
-p_med_vs_sum_25_rep <- ggplot(med_vs_sum_variant, 
-                             aes(ave_med_ratio_25_norm, 
-                                 ave_ratio_25_norm, 
-                                 color = subpool)) +
-  geom_point(alpha = 0.3) +
-  geom_point(data = filter(
-    med_vs_sum_variant, 
-    grepl('subpool5_no_site_no_site_no_site_no_site_no_site_no_site', 
-          name)), 
-    color = 'red') +
-  annotation_logticks(sides = 'bl') +
-  xlab("log2 background-norm.\nmedian RNA/DNA") +
-  ylab("log2 background-norm.\nsum RNA/DNA") +
-  background_grid(major = 'xy', minor = 'none') +
-  annotate("text", x = 2, y = 2, 
-           label = paste('r =', round(cor(med_vs_sum_variant$ave_med_ratio_25_norm,
-                                          med_vs_sum_variant$ave_ratio_25_norm,
-                                          use = "pairwise.complete.obs", 
-                                          method = "pearson"), 2)))
-
-p_med_vs_sum_ind_rep <- ggplot(med_vs_sum_variant, 
-                              aes(induction_med, induction_sum,
-                                  color = log2(barcodes_DNA))) +
-  scale_color_viridis() + 
+p_med_vs_sum_0_rep <- ggplot(data = NULL, 
+                             aes(ave_med_ratio_0_norm, ave_ratio_0_norm)) +
   facet_grid(. ~ subpool) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_density2d(data = med_vs_sum_variant, 
+                 color = 'black', size = 0.2, bins = 10) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  scale_x_continuous(breaks = c(-2:7), limits = c(-2, 7)) + 
+  scale_y_continuous(breaks = c(-2:7), limits = c(-2, 7)) +
+  background_grid(major = 'xy', minor = 'none') + 
   panel_border() +
-  geom_point(alpha = 0.3) +
-  geom_point(data = filter(
-    med_vs_sum_variant, 
-    grepl('subpool5_no_site_no_site_no_site_no_site_no_site_no_site', 
-          name)), 
-    color = 'red') +
-  annotation_logticks(sides = 'bl') +
-  xlab("log2 induction of median RNA/DNA") +
-  ylab("log2 induction of sum RNA/DNA") +
-  background_grid(major = 'xy', minor = 'none') +
-  annotate("text", x = 2, y = 2, 
-           label = paste('r =', round(cor(med_vs_sum_variant$induction_med,
-                                          med_vs_sum_variant$induction_sum,
-                                          use = "pairwise.complete.obs", 
-                                          method = "pearson"), 2)))
+  annotate("text", x = 1.4, y = 7, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool5')$ave_med_ratio_0_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool5')$ave_ratio_0_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 1.4, y = 6, color = '#33638DFF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool3')$ave_med_ratio_0_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool3')$ave_ratio_0_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 1.4, y = 5, color = '#29AF7FFF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool4')$ave_med_ratio_0_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool4')$ave_ratio_0_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 1.4, y = 4, color = '#DCE319FF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool2')$ave_med_ratio_0_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool2')$ave_ratio_0_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
+
+p_med_vs_sum_25_rep <- ggplot(data = NULL, 
+                              aes(ave_med_ratio_25_norm, ave_ratio_25_norm)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(med_vs_sum_variant, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_density2d(data = med_vs_sum_variant, 
+                 color = 'black', size = 0.2, bins = 10) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  scale_x_continuous(breaks = c(-2:7), limits = c(-2, 7)) + 
+  scale_y_continuous(breaks = c(-2:7), limits = c(-2, 7)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border() +
+  annotate("text", x = 1.4, y = 7, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool5')$ave_med_ratio_25_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool5')$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 1.4, y = 6, color = '#33638DFF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool3')$ave_med_ratio_25_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool3')$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 1.4, y = 5, color = '#29AF7FFF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool4')$ave_med_ratio_25_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool4')$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 1.4, y = 4, color = '#DCE319FF', 
+           label = paste('r =', 
+                         round(cor(filter(med_vs_sum_variant, 
+                                          subpool == 'subpool2')$ave_med_ratio_25_norm,
+                                   filter(med_vs_sum_variant, 
+                                          subpool == 'subpool2')$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
+
+p_med_vs_sum_0_25_rep <- plot_grid(p_med_vs_sum_0_rep, p_med_vs_sum_25_rep, 
+                                   nrow = 2, scale = 0.9,
+                                   labels = c(' 0 µM', '25 µM'), 
+                                   align = 'v', hjust = -3, vjust = -1)
+
+save_plot('plots/p_med_vs_sum_0_25_rep.png', p_med_vs_sum_0_25_rep,
+          base_width = 10.5, base_height = 7)
   
 #Compare replicates with median ratios
 
@@ -1214,11 +1273,11 @@ p_rep_backnorm_med_0 <- ggplot(data = NULL,
   annotation_logticks(scaled = TRUE) +
   xlab("log2 background-norm.\nmedian RNA/DNA BR 1") +
   ylab("log2 background-norm.\nmedian RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(-1:6), limits = c(-1.5, 6)) + 
-  scale_y_continuous(breaks = c(-1:6), limits = c(-1.5, 6)) +
+  scale_x_continuous(breaks = c(-2:7), limits = c(-2, 7)) + 
+  scale_y_continuous(breaks = c(-2:7), limits = c(-2, 7)) +
   background_grid(major = 'xy', minor = 'none') + 
   panel_border() +
-  annotate("text", x = 1.2, y = 6, color = '#440154FF', 
+  annotate("text", x = 1.4, y = 7, color = '#440154FF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool5')$med_ratio_0A_norm,
@@ -1227,7 +1286,7 @@ p_rep_backnorm_med_0 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 1.2, y = 5, color = '#33638DFF', 
+  annotate("text", x = 1.4, y = 6, color = '#33638DFF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool3')$med_ratio_0A_norm,
@@ -1236,7 +1295,7 @@ p_rep_backnorm_med_0 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 1.2, y = 4, color = '#29AF7FFF', 
+  annotate("text", x = 1.4, y = 5, color = '#29AF7FFF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool4')$med_ratio_0A_norm,
@@ -1245,7 +1304,7 @@ p_rep_backnorm_med_0 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 1.2, y = 3, color = '#DCE319FF', 
+  annotate("text", x = 1.4, y = 4, color = '#DCE319FF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool2')$med_ratio_0A_norm,
@@ -1274,11 +1333,11 @@ p_rep_backnorm_med_25 <- ggplot(data = NULL,
   annotation_logticks(scaled = TRUE) +
   xlab("log2 background-norm.\nmedian RNA/DNA BR 1") +
   ylab("log2 background-norm.\nmedian RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(-1:6), limits = c(-1.5, 6)) + 
-  scale_y_continuous(breaks = c(-1:6), limits = c(-1.5, 6)) +
+  scale_x_continuous(breaks = c(-2:7), limits = c(-2, 7)) + 
+  scale_y_continuous(breaks = c(-2:7), limits = c(-2, 7)) +
   background_grid(major = 'xy', minor = 'none') + 
   panel_border() +
-  annotate("text", x = 1.2, y = 6, color = '#440154FF', 
+  annotate("text", x = 1.4, y = 7, color = '#440154FF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool5')$med_ratio_25A_norm,
@@ -1287,7 +1346,7 @@ p_rep_backnorm_med_25 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 1.2, y = 5, color = '#33638DFF', 
+  annotate("text", x = 1.4, y = 6, color = '#33638DFF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool3')$med_ratio_25A_norm,
@@ -1296,7 +1355,7 @@ p_rep_backnorm_med_25 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 1.2, y = 4, color = '#29AF7FFF', 
+  annotate("text", x = 1.4, y = 5, color = '#29AF7FFF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool4')$med_ratio_25A_norm,
@@ -1305,7 +1364,7 @@ p_rep_backnorm_med_25 <- ggplot(data = NULL,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"),
                                2))) +
-  annotate("text", x = 1.2, y = 3, color = '#DCE319FF', 
+  annotate("text", x = 1.4, y = 4, color = '#DCE319FF', 
            label = paste('r =', 
                          round(cor(filter(log2_med_rep_1_2_back_norm, 
                                           subpool == 'subpool2')$med_ratio_25A_norm,
@@ -1316,10 +1375,10 @@ p_rep_backnorm_med_25 <- ggplot(data = NULL,
                                2)))
 
 p_rep_backnorm_med_0_25 <- plot_grid(p_rep_backnorm_med_0, 
-                                           p_rep_backnorm_med_25, 
-                                           nrow = 2, scale = 0.9,
-                                           labels = c(' 0 µM', '25 µM'), 
-                                           align = 'v', hjust = -3, vjust = -1)
+                                     p_rep_backnorm_med_25, 
+                                     nrow = 2, scale = 0.9,
+                                     labels = c(' 0 µM', '25 µM'), 
+                                     align = 'v', hjust = -3, vjust = -1)
 
 save_plot('plots/p_rep_backnorm_med_0_25.png', p_rep_backnorm_med_0_25,
           base_width = 10.5, base_height = 7)
