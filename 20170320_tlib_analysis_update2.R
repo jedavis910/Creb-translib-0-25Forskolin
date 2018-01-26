@@ -768,6 +768,7 @@ save_plot('plots/subpool3_chr9_10_0_25.png',
           p_subpool3_chr9_10_0_25, base_width = 32, base_height = 20,
           scale = 0.3)
 
+
 #Subpool 5
 
 #plot combinations of consensus and weak vs. their induced expression as a 
@@ -829,6 +830,101 @@ p_25_ind_s5 <- ggplot(subpool5, aes(ave_ratio_25_norm, induction)) +
 
 save_plot('plots/p_25_ind_s5.png', p_25_ind_s5, scale = 1.5, base_width = 4,
           base_height = 4)
+
+#There is a minor population of very active sequences at 0 µM
+
+p_exp_distrib_0 <- ggplot(subpool5, aes(ave_ratio_0_norm)) +
+  facet_grid(. ~ background) +
+  scale_x_log10() +
+  geom_density(kernel = 'gaussian') +
+  annotation_logticks(scaled = TRUE, sides = 'b') +
+  xlab("Log10 average background-norm.\nreads RNA/DNA") +
+  geom_vline(xintercept = 4) +
+  panel_border()
+
+save_plot('plots/p_exp_distrib_0.png', p_exp_distrib_0, 
+          base_width = 3, base_height = 2, scale = 1.5)
+
+s5_highexp_0 <-subpool5 %>%
+  filter(ave_ratio_0_norm >= 4)
+
+s5_lowexp_0 <-subpool5 %>%
+  filter(ave_ratio_0_norm < 4)
+
+p_pop_unind_exp25_vs_ind <- ggplot(data = NULL, aes(ave_ratio_25_norm, induction)) +
+  facet_grid(background ~ .) +
+  panel_border() +
+  geom_point(data = s5_lowexp_0, fill = '#482677FF', shape = 21) +
+  geom_point(data = s5_highexp_0, fill = '#B8DE29FF', shape = 21) +
+  xlab('Log10 normalized expression at 25 µM') +
+  scale_x_log10() + scale_y_log10() +
+  annotation_logticks(sides = 'bl') +
+  ylab('Log10 induction')
+
+save_plot('plots/p_pop_unind_exp25_vs_ind.png', p_pop_unind_exp25_vs_ind, 
+          scale = 1.5, base_width = 2.5, base_height = 4)
+
+#Count site type per location in these populations
+
+site_loc_type_count <- function(df) {
+  site1 <- df %>%
+    group_by(background) %>%
+    count(site1, site1 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site1) %>%
+    select(-3) %>%
+    mutate(site = 1)
+  site2 <- df %>%
+    group_by(background) %>%
+    count(site2, site2 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site2) %>%
+    select(-3) %>%
+    mutate(site = 2)
+  site3 <- df %>%
+    group_by(background) %>%
+    count(site3, site3 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site3) %>%
+    select(-3) %>%
+    mutate(site = 3)
+  site4 <- df %>%
+    group_by(background) %>%
+    count(site4, site4 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site4) %>%
+    select(-3) %>%
+    mutate(site = 4)
+  site5 <- df %>%
+    group_by(background) %>%
+    count(site5, site5 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site5) %>%
+    select(-3) %>%
+    mutate(site = 5)
+  site6 <- df %>%
+    group_by(background) %>%
+    count(site6, site6 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site6) %>%
+    select(-3) %>%
+    mutate(site = 6)
+  site_join <- bind_rows(site1, site2, site3, site4, site5, site6)
+  return(site_join)
+}
+
+s5_highexp_0_sites <- site_loc_type_count(s5_highexp_0)
+s5_lowexp_0_sites <- site_loc_type_count(s5_lowexp_0)
+
+p_site_highexp_0 <- ggplot(s5_highexp_0_sites,
+                           aes(as.factor(site), counts, fill = type)) +
+  facet_grid(. ~ background) +
+  geom_bar(stat = 'identity', position = 'fill') +
+  scale_fill_viridis(discrete = TRUE) + 
+  xlab('Site position')
+
+save_plot('plots/p_site_highexp_0.png', p_site_highexp_0, 
+          scale = 2, base_width = 3, base_height = 1.5)
 
 #Filter out sites that have higher induction than their 6 consensus site-
 #counterpart
@@ -904,53 +1000,6 @@ subpool5_exp_25_greater_c6 <- exp_25_greater_c6(subpool5)
 
 #Count site type per site location
 
-site_loc_type_count <- function(df) {
-  site1 <- df %>%
-    group_by(background) %>%
-    count(site1, site1 == 'consensus') %>%
-    rename(counts = n) %>%
-    rename(type = site1) %>%
-    select(-3) %>%
-    mutate(site = 1)
-  site2 <- df %>%
-    group_by(background) %>%
-    count(site2, site2 == 'consensus') %>%
-    rename(counts = n) %>%
-    rename(type = site2) %>%
-    select(-3) %>%
-    mutate(site = 2)
-  site3 <- df %>%
-    group_by(background) %>%
-    count(site3, site3 == 'consensus') %>%
-    rename(counts = n) %>%
-    rename(type = site3) %>%
-    select(-3) %>%
-    mutate(site = 3)
-  site4 <- df %>%
-    group_by(background) %>%
-    count(site4, site4 == 'consensus') %>%
-    rename(counts = n) %>%
-    rename(type = site4) %>%
-    select(-3) %>%
-    mutate(site = 4)
-  site5 <- df %>%
-    group_by(background) %>%
-    count(site5, site5 == 'consensus') %>%
-    rename(counts = n) %>%
-    rename(type = site5) %>%
-    select(-3) %>%
-    mutate(site = 5)
-  site6 <- df %>%
-    group_by(background) %>%
-    count(site6, site6 == 'consensus') %>%
-    rename(counts = n) %>%
-    rename(type = site6) %>%
-    select(-3) %>%
-    mutate(site = 6)
-  site_join <- bind_rows(site1, site2, site3, site4, site5, site6)
-  return(site_join)
-}
-
 subpool5_indgreater_c6_sites <- site_loc_type_count(subpool5_indgreater_c6)
 
 subpool5_exp_25_greater_c6_sites <- site_loc_type_count(
@@ -971,6 +1020,88 @@ p_site_exp_25_greater_c6 <- ggplot(subpool5_exp_25_greater_c6_sites,
 save_plot('plots/p_site_exp_25_greater_c6.png', p_site_exp_25_greater_c6, 
           base_width = 4, base_height = 2, scale = 1.5)
 
+
+#Look at site architecture changes per background per 10% population bins that 
+#span induced expression
+
+s5_binned_exp_25 <- subpool5 %>%
+  group_by(background) %>%
+  mutate(bin = ntile(ave_ratio_25_norm, 5))
+
+site_loc_type_count_bin <- function(df) {
+  site1 <- df %>%
+    group_by(background, bin) %>%
+    count(site1, site1 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site1) %>%
+    select(-4) %>%
+    mutate(site = 1)
+  site2 <- df %>%
+    group_by(background, bin) %>%
+    count(site2, site2 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site2) %>%
+    select(-4) %>%
+    mutate(site = 2)
+  site3 <- df %>%
+    group_by(background, bin) %>%
+    count(site3, site3 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site3) %>%
+    select(-4) %>%
+    mutate(site = 3)
+  site4 <- df %>%
+    group_by(background, bin) %>%
+    count(site4, site4 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site4) %>%
+    select(-4) %>%
+    mutate(site = 4)
+  site5 <- df %>%
+    group_by(background, bin) %>%
+    count(site5, site5 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site5) %>%
+    select(-4) %>%
+    mutate(site = 5)
+  site6 <- df %>%
+    group_by(background, bin) %>%
+    count(site6, site6 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site6) %>%
+    select(-4) %>%
+    mutate(site = 6)
+  site_join <- bind_rows(site1, site2, site3, site4, site5, site6)
+  return(site_join)
+}
+
+s5_binned_exp_25_sites <- site_loc_type_count_bin(s5_binned_exp_25)
+
+p_s5_binned_exp_25_sites <- ggplot(s5_binned_exp_25_sites,
+                                   aes(as.factor(site), counts, fill = type)) +
+  facet_grid(background ~ bin) +
+  geom_bar(stat = 'identity', position = 'fill') +
+  scale_fill_viridis(discrete = TRUE) + 
+  xlab('Site position')
+
+ggplot(data = NULL, aes(x = "", y = ave_ratio_25_norm)) +
+  facet_grid(background ~ .) +
+  geom_boxplot(data = filter(subpool5, site1 == 'consensus' & site_combo == 'consensus'), 
+               aes(x = 'site 1')) +
+  geom_boxplot(data = filter(subpool5, site2 == 'consensus' & site_combo == 'consensus'),
+               aes(x = 'site 2')) +
+  geom_boxplot(data = filter(subpool5, site3 == 'consensus' & site_combo == 'consensus'), 
+               aes(x = 'site 3')) +
+  geom_boxplot(data = filter(subpool5, site4 == 'consensus' & site_combo == 'consensus'),
+               aes(x = 'site 4')) +
+  geom_boxplot(data = filter(subpool5, site5 == 'consensus' & site_combo == 'consensus'), 
+               aes(x = 'site 5')) +
+  geom_boxplot(data = filter(subpool5, site6 == 'consensus' & site_combo == 'consensus'), 
+               aes(x = 'site 6')) +
+  scale_y_log10() + annotation_logticks(sides = 'l') +
+  ylab("log10 average background-norm.\nreads RNA/DNA at 25 µM") + 
+  xlab('Site position') +
+  panel_border()
 
 
 #Plot change in induction from consensus to weak or no_site starting at
