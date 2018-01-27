@@ -794,77 +794,26 @@ save_plot('plots/p_num_sites_num_weak.png', p_num_sites_num_weak, scale = 1.3,
           base_width = 6, base_height = 4)
 
 
-#Do weak sites operate as no_sites or do they still contribute to expression?
+#Filter out sites that have higher induced expression than their 6 consensus 
+#site-counterpart
 
-p_num_cons_num_weak <- ggplot(subpool5, 
-                               aes(x = as.factor(consensus), 
-                                   y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(color = as.factor(weak)), show.legend = TRUE,
-               position = position_dodge(1)) +
-  scale_y_log10() +
-  facet_grid(background ~ .) + 
-  panel_border() +
-  annotation_logticks(sides = 'lr') +
-  scale_color_manual(values = cbPalette7) +
-  background_grid(major = 'y', minor = 'none') + 
-  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('log10 expression at 25 µM') +
-  xlab('Number of consensus sites')
+exp_25_greater_c6 <- function(df) {
+  c6 <- df %>%
+    filter(consensus == 6) %>%
+    select(background, induction, ave_ratio_0_norm, ave_ratio_25_norm) %>%
+    rename(induction_c6 = induction) %>%
+    rename(ave_ratio_0_norm_c6 = ave_ratio_0_norm) %>%
+    rename(ave_ratio_25_norm_c6 = ave_ratio_25_norm)
+  c6_exp_25_join <- left_join(df, c6, by = 'background') %>%
+    group_by(background) %>%
+    filter(ave_ratio_25_norm > ave_ratio_25_norm_c6) %>%
+    ungroup()
+  return(c6_exp_25_join) 
+}
 
-save_plot('plots/p_num_cons_num_weak.png', p_num_cons_num_weak, scale = 1.3,
-          base_width = 6, base_height = 4)
+subpool5_exp_25_greater_c6 <- exp_25_greater_c6(subpool5)
 
-
-#There is almost a linear relationship between induced expression and induction
-#with high-expression uninduced variants as outliers
-
-p_25_ind_s5 <- ggplot(subpool5, aes(ave_ratio_25_norm, induction)) +
-  facet_grid(. ~ background) +
-  panel_border() +
-  geom_point(aes(fill = log10(ave_ratio_0_norm)), shape = 21) +
-  scale_fill_viridis() +
-  xlab('Log10 normalized expression at 25 µM') +
-  scale_x_log10() + scale_y_log10() +
-  annotation_logticks(sides = 'bl') +
-  ylab('Log10 induction')
-
-save_plot('plots/p_25_ind_s5.png', p_25_ind_s5, scale = 1.5, base_width = 4,
-          base_height = 4)
-
-#There is a minor population of very active sequences at 0 µM
-
-p_exp_distrib_0 <- ggplot(subpool5, aes(ave_ratio_0_norm)) +
-  facet_grid(. ~ background) +
-  scale_x_log10() +
-  geom_density(kernel = 'gaussian') +
-  annotation_logticks(scaled = TRUE, sides = 'b') +
-  xlab("Log10 average background-norm.\nreads RNA/DNA") +
-  geom_vline(xintercept = 4) +
-  panel_border()
-
-save_plot('plots/p_exp_distrib_0.png', p_exp_distrib_0, 
-          base_width = 3, base_height = 2, scale = 1.5)
-
-s5_highexp_0 <-subpool5 %>%
-  filter(ave_ratio_0_norm >= 4)
-
-s5_lowexp_0 <-subpool5 %>%
-  filter(ave_ratio_0_norm < 4)
-
-p_pop_unind_exp25_vs_ind <- ggplot(data = NULL, aes(ave_ratio_25_norm, induction)) +
-  facet_grid(background ~ .) +
-  panel_border() +
-  geom_point(data = s5_lowexp_0, fill = '#482677FF', shape = 21) +
-  geom_point(data = s5_highexp_0, fill = '#B8DE29FF', shape = 21) +
-  xlab('Log10 normalized expression at 25 µM') +
-  scale_x_log10() + scale_y_log10() +
-  annotation_logticks(sides = 'bl') +
-  ylab('Log10 induction')
-
-save_plot('plots/p_pop_unind_exp25_vs_ind.png', p_pop_unind_exp25_vs_ind, 
-          scale = 1.5, base_width = 2.5, base_height = 4)
-
-#Count site type per location in these populations
+#Count site type per site location
 
 site_loc_type_count <- function(df) {
   site1 <- df %>%
@@ -913,105 +862,10 @@ site_loc_type_count <- function(df) {
   return(site_join)
 }
 
-s5_highexp_0_sites <- site_loc_type_count(s5_highexp_0)
-s5_lowexp_0_sites <- site_loc_type_count(s5_lowexp_0)
-
-p_site_highexp_0 <- ggplot(s5_highexp_0_sites,
-                           aes(as.factor(site), counts, fill = type)) +
-  facet_grid(. ~ background) +
-  geom_bar(stat = 'identity', position = 'fill') +
-  scale_fill_viridis(discrete = TRUE) + 
-  xlab('Site position')
-
-save_plot('plots/p_site_highexp_0.png', p_site_highexp_0, 
-          scale = 2, base_width = 3, base_height = 1.5)
-
-#Filter out sites that have higher induction than their 6 consensus site-
-#counterpart
-
-ind_greater_c6 <- function(df) {
-  c6_ind <- df %>%
-    filter(consensus == 6) %>%
-    select(background, induction, ave_ratio_0_norm, ave_ratio_25_norm) %>%
-    rename(induction_c6 = induction) %>%
-    rename(ave_ratio_0_norm_c6 = ave_ratio_0_norm) %>%
-    rename(ave_ratio_25_norm_c6 = ave_ratio_25_norm)
-  c6_ind_join <- left_join(df, c6_ind, by = 'background') %>%
-    group_by(background) %>%
-    filter(induction >= induction_c6) %>%
-    ungroup()
-  return(c6_ind_join) 
-}
-
-subpool5_indgreater_c6 <- ind_greater_c6(subpool5)
-
-#Sequences with higher induction than their 6-site consensus don't have a lower
-#uninduced or higher induced expression
-
-p_unind_indgreater_c6 <- ggplot(subpool5_indgreater_c6, 
-                                aes(background, ave_ratio_0_norm)) +
-  geom_boxplot(aes(y = ave_ratio_0_norm_c6)) +
-  geom_point(aes(fill = log10(induction)), 
-             color = 'black', shape = 21, size = 2, stroke = 0.5, 
-             position = position_jitterdodge(dodge.width = 0,
-                                             jitter.width = 0.6)) +
-  scale_fill_viridis() +
-  scale_y_log10(limits = c(1, 100)) +
-  annotation_logticks(sides = 'l') +
-  ylab('Log10 expression')
-
-p_ind_indgreater_c6 <- ggplot(subpool5_indgreater_c6, 
-                              aes(background, ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = ave_ratio_25_norm_c6)) +
-  geom_point(aes(fill = log10(induction)), 
-             color = 'black', shape = 21, size = 2, stroke = 0.5, 
-             position = position_jitterdodge(dodge.width = 0, 
-                                             jitter.width = 0.6)) +
-  scale_fill_viridis() +
-  scale_y_log10(limits = c(1, 100)) +
-  annotation_logticks(sides = 'l') +
-  ylab('Log10 expression')
-
-p_exp_indgreater_c6 <- plot_grid(p_unind_indgreater_c6, p_ind_indgreater_c6,
-                                 ncol = 2, labels = c(' 0 µM', '25 µM'),
-                                 align = 'h', hjust = -2)
-
-save_plot('plots/p_exp_indgreater_c6.png', p_exp_indgreater_c6, scale = 1.5,
-          base_width = 6, base_height = 2)
-
-#Filter out sites that have higher induced expression than their 6 consensus 
-#site-counterpart
-
-exp_25_greater_c6 <- function(df) {
-  c6 <- df %>%
-    filter(consensus == 6) %>%
-    select(background, induction, ave_ratio_0_norm, ave_ratio_25_norm) %>%
-    rename(induction_c6 = induction) %>%
-    rename(ave_ratio_0_norm_c6 = ave_ratio_0_norm) %>%
-    rename(ave_ratio_25_norm_c6 = ave_ratio_25_norm)
-  c6_exp_25_join <- left_join(df, c6, by = 'background') %>%
-    group_by(background) %>%
-    filter(ave_ratio_25_norm > ave_ratio_25_norm_c6) %>%
-    ungroup()
-  return(c6_exp_25_join) 
-}
-
-subpool5_exp_25_greater_c6 <- exp_25_greater_c6(subpool5)
-
-#Count site type per site location
-
-subpool5_indgreater_c6_sites <- site_loc_type_count(subpool5_indgreater_c6)
-
-subpool5_exp_25_greater_c6_sites <- site_loc_type_count(
-  subpool5_exp_25_greater_c6)
-
-p_site_indgreater_c6 <- ggplot(subpool5_indgreater_c6,
-                               aes(as.factor(site), counts)) +
-  facet_grid(. ~ background) +
-  geom_bar(aes(fill = type), stat = 'identity', position = 'stack')
+subpool5_exp_25_greater_c6_sites <- site_loc_type_count(subpool5_exp_25_greater_c6)
 
 p_site_exp_25_greater_c6 <- ggplot(subpool5_exp_25_greater_c6_sites,
-                               aes(as.factor(site), counts, fill = type)) +
+                                   aes(as.factor(site), counts, fill = type)) +
   facet_grid(. ~ background) +
   geom_bar(stat = 'identity', position = 'fill') +
   scale_fill_viridis(discrete = TRUE) + 
@@ -1021,7 +875,28 @@ save_plot('plots/p_site_exp_25_greater_c6.png', p_site_exp_25_greater_c6,
           base_width = 4, base_height = 2, scale = 1.5)
 
 
-#Look at site architecture changes per background per 10% population bins that 
+#Do weak sites operate as no_sites or do they still contribute to expression?
+
+p_num_cons_num_weak <- ggplot(subpool5, 
+                              aes(x = as.factor(consensus), 
+                                  y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(color = as.factor(weak)), show.legend = TRUE,
+               position = position_dodge(1)) +
+  scale_y_log10() +
+  facet_grid(background ~ .) + 
+  panel_border() +
+  annotation_logticks(sides = 'lr') +
+  scale_color_manual(values = cbPalette7) +
+  background_grid(major = 'y', minor = 'none') + 
+  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
+  ylab('log10 expression at 25 µM') +
+  xlab('Number of consensus sites')
+
+save_plot('plots/p_num_cons_num_weak.png', p_num_cons_num_weak, scale = 1.3,
+          base_width = 6, base_height = 4)
+
+
+#Look at site architecture changes per background per n% population bins that 
 #span induced expression
 
 s5_binned_exp_25 <- subpool5 %>%
@@ -1102,6 +977,129 @@ ggplot(data = NULL, aes(x = "", y = ave_ratio_25_norm)) +
   ylab("log10 average background-norm.\nreads RNA/DNA at 25 µM") + 
   xlab('Site position') +
   panel_border()
+
+
+#Fitting a model to the 6-site library
+
+ind_site_ind_back <- function(df) {
+  model <- lm(ave_ratio_25_norm ~ 
+                site1 + site2 + site3 + site4 + site5 + site6 + background, 
+              data = df)
+}
+
+hill_like_model <- function(df) {
+  n_init <- 1
+  site_half_max_init <- 1
+  hill_nls <- nls(
+    ave_ratio_25_norm ~ ((max(ave_ratio_25_norm) * (total_sites^n)) / (site_half_max + (total_sites^n))) + background, 
+    data = df, start = c(n = n_init, site_half_max = site_half_max_init))
+  return(hill_nls)
+}
+
+pred_resid <- function(df1, x) {
+  df2 <- df1 %>%
+    add_predictions(x)
+  df3 <- df2 %>%
+    add_residuals(x)
+  return(df3)
+  print('processed pre_res_trans_int(df1, df2) in order of (data, model)')
+}
+
+s5_onlycons_log2 <- subpool5 %>%
+  filter(weak == 0) %>%
+  var_log2()
+
+ind_site_ind_back_fit <- ind_site_ind_back(s5_onlycons_log2)
+ind_site_ind_back_p_r <- pred_resid(s5_onlycons_log2, ind_site_ind_back_fit)
+
+hill_total_site_ind_back_fit <- hill_like_model(s5_onlycons_log2)
+
+ggplot(ind_site_ind_back_p_r, aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
+
+ggplot(ind_site_ind_back_p_r, aes(pred, ave_ratio_25_norm, 
+                                  fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 predicted expression') + ylab('log2 observed expression') +
+  annotate("text", x = 1.6, y = 4, label = paste('r =', 
+                         round(cor(ind_site_ind_back_p_r$pred,
+                                   ind_site_ind_back_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
+
+
+#There is almost a linear relationship between induced expression and induction
+#with high-expression uninduced variants as outliers
+
+p_25_ind_s5 <- ggplot(subpool5, aes(ave_ratio_25_norm, induction)) +
+  facet_grid(. ~ background) +
+  panel_border() +
+  geom_point(aes(fill = log10(ave_ratio_0_norm)), shape = 21) +
+  scale_fill_viridis() +
+  xlab('Log10 normalized expression at 25 µM') +
+  scale_x_log10() + scale_y_log10() +
+  annotation_logticks(sides = 'bl') +
+  ylab('Log10 induction')
+
+save_plot('plots/p_25_ind_s5.png', p_25_ind_s5, scale = 1.5, base_width = 4,
+          base_height = 4)
+
+#There is a minor population of very active sequences at 0 µM
+
+p_exp_distrib_0 <- ggplot(subpool5, aes(ave_ratio_0_norm)) +
+  facet_grid(. ~ background) +
+  scale_x_log10() +
+  geom_density(kernel = 'gaussian') +
+  annotation_logticks(scaled = TRUE, sides = 'b') +
+  xlab("Log10 average background-norm.\nreads RNA/DNA") +
+  geom_vline(xintercept = 4) +
+  panel_border()
+
+save_plot('plots/p_exp_distrib_0.png', p_exp_distrib_0, 
+          base_width = 3, base_height = 2, scale = 1.5)
+
+s5_highexp_0 <-subpool5 %>%
+  filter(ave_ratio_0_norm >= 4)
+
+s5_lowexp_0 <-subpool5 %>%
+  filter(ave_ratio_0_norm < 4)
+
+p_pop_unind_exp25_vs_ind <- ggplot(data = NULL, aes(ave_ratio_25_norm, induction)) +
+  facet_grid(background ~ .) +
+  panel_border() +
+  geom_point(data = s5_lowexp_0, fill = '#482677FF', shape = 21) +
+  geom_point(data = s5_highexp_0, fill = '#B8DE29FF', shape = 21) +
+  xlab('Log10 normalized expression at 25 µM') +
+  scale_x_log10() + scale_y_log10() +
+  annotation_logticks(sides = 'bl') +
+  ylab('Log10 induction')
+
+save_plot('plots/p_pop_unind_exp25_vs_ind.png', p_pop_unind_exp25_vs_ind, 
+          scale = 1.5, base_width = 2.5, base_height = 4)
+
+#Count site type per location in these high uninduced-expression variants
+
+s5_highexp_0_sites <- site_loc_type_count(s5_highexp_0)
+s5_lowexp_0_sites <- site_loc_type_count(s5_lowexp_0)
+
+p_site_highexp_0 <- ggplot(s5_highexp_0_sites,
+                           aes(as.factor(site), counts, fill = type)) +
+  facet_grid(. ~ background) +
+  geom_bar(stat = 'identity', position = 'fill') +
+  scale_fill_viridis(discrete = TRUE) + 
+  xlab('Site position')
+
+save_plot('plots/p_site_highexp_0.png', p_site_highexp_0, 
+          scale = 2, base_width = 3, base_height = 1.5)
+
+
+
+
 
 
 #Plot change in induction from consensus to weak or no_site starting at
