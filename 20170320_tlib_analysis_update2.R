@@ -979,60 +979,6 @@ ggplot(data = NULL, aes(x = "", y = ave_ratio_25_norm)) +
   panel_border()
 
 
-#Fitting a model to the 6-site library
-
-ind_site_ind_back <- function(df) {
-  model <- lm(ave_ratio_25_norm ~ 
-                site1 + site2 + site3 + site4 + site5 + site6 + background, 
-              data = df)
-}
-
-hill_like_model <- function(df) {
-  n_init <- 1
-  site_half_max_init <- 1
-  hill_nls <- nls(
-    ave_ratio_25_norm ~ ((max(ave_ratio_25_norm) * (total_sites^n)) / (site_half_max + (total_sites^n))) + background, 
-    data = df, start = c(n = n_init, site_half_max = site_half_max_init))
-  return(hill_nls)
-}
-
-pred_resid <- function(df1, x) {
-  df2 <- df1 %>%
-    add_predictions(x)
-  df3 <- df2 %>%
-    add_residuals(x)
-  return(df3)
-  print('processed pre_res_trans_int(df1, df2) in order of (data, model)')
-}
-
-s5_onlycons_log2 <- subpool5 %>%
-  filter(weak == 0) %>%
-  var_log2()
-
-ind_site_ind_back_fit <- ind_site_ind_back(s5_onlycons_log2)
-ind_site_ind_back_p_r <- pred_resid(s5_onlycons_log2, ind_site_ind_back_fit)
-
-hill_total_site_ind_back_fit <- hill_like_model(s5_onlycons_log2)
-
-ggplot(ind_site_ind_back_p_r, aes(x = as.factor(total_sites))) +
-  facet_grid(. ~ background) +
-  geom_boxplot(aes(y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = pred), color = 'red')
-
-ggplot(ind_site_ind_back_p_r, aes(pred, ave_ratio_25_norm, 
-                                  fill = total_sites)) +
-  geom_point(shape = 21, alpha = 0.7) +
-  scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 predicted expression') + ylab('log2 observed expression') +
-  annotate("text", x = 1.6, y = 4, label = paste('r =', 
-                         round(cor(ind_site_ind_back_p_r$pred,
-                                   ind_site_ind_back_p_r$ave_ratio_25_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2)))
-
-
 #There is almost a linear relationship between induced expression and induction
 #with high-expression uninduced variants as outliers
 
@@ -1098,78 +1044,262 @@ save_plot('plots/p_site_highexp_0.png', p_site_highexp_0,
           scale = 2, base_width = 3, base_height = 1.5)
 
 
+#Fitting a model to the 6-site library------------------------------------------
+
+#subset to only fit to consensus sites
+
+s5_onlycons_log2 <- subpool5 %>%
+  filter(weak == 0) %>%
+  var_log2()
+
+bin_site_s5 <- s5_onlycons_log2 %>%
+  mutate(site1 = str_detect(site1, 'consensus') + 0) %>%
+  mutate(site2 = str_detect(site2, 'consensus') + 0) %>%
+  mutate(site3 = str_detect(site3, 'consensus') + 0) %>%
+  mutate(site4 = str_detect(site4, 'consensus') + 0) %>%
+  mutate(site5 = str_detect(site5, 'consensus') + 0) %>%
+  mutate(site6 = str_detect(site6, 'consensus') + 0)
+
+pred_resid <- function(df1, x) {
+  df2 <- df1 %>%
+    add_predictions(x)
+  df3 <- df2 %>%
+    add_residuals(x)
+  return(df3)
+  print('processed pre_res_trans_int(df1, df2) in order of (data, model)')
+}
+
+#Linear models
+
+#Just use total sites, independent background variable
+
+totsite_ind_back <- function(df) {
+  model <- lm(ave_ratio_25_norm ~ total_sites + background, data = df)
+}
+
+totsite_ind_back_fit <- totsite_ind_back(bin_site_s5)
+summary(totsite_ind_back_fit)
+anova(totsite_ind_back_fit)
+totsite_ind_back_p_r <- pred_resid(bin_site_s5, totsite_ind_back_fit)
+
+ggplot(totsite_ind_back_p_r, aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
+
+p_totsite_ind_back_r <- ggplot(totsite_ind_back_p_r, aes(ave_ratio_25_norm, pred,
+                                                         fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted expression') +
+  annotate("text", x = 1, y = 5, 
+           label = paste('r =', 
+                         round(cor(totsite_ind_back_p_r$pred,
+                                   totsite_ind_back_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
 
 
+#All independent sites, no background variable
 
+ind_site <- function(df) {
+  model <- lm(ave_ratio_25_norm ~ 
+                site1 + site2 + site3 + site4 + site5 + site6, data = df)
+}
 
-#Plot change in induction from consensus to weak or no_site starting at
-#all 6 sites being filled with consensus. Do this per background
-library('reshape2')
+ind_site_fit <- ind_site(bin_site_s5)
+summary(ind_site_fit)
+anova(ind_site_fit)
+ind_site_p_r <- pred_resid(bin_site_s5, ind_site_fit)
 
-sep_5_pos_type <- sep_5 %>%
-  filter(consensus >= 5) %>%
-  mutate(position = 0) %>%
-  mutate(type = 'consensus') %>%
-  mutate(position = ifelse(site1 != 'consensus', 1, position)) %>%
-  mutate(position = ifelse(site2 != 'consensus', 2, position)) %>%
-  mutate(position = ifelse(site3 != 'consensus', 3, position)) %>%
-  mutate(position = ifelse(site4 != 'consensus', 4, position)) %>%
-  mutate(position = ifelse(site5 != 'consensus', 5, position)) %>%
-  mutate(position = ifelse(site6 != 'consensus', 6, position)) %>%
-  mutate(type = ifelse(weak == 1, 'weak', type)) %>%
-  mutate(type = ifelse(nosite == 1, 'none', type))
+ggplot(ind_site_p_r, aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
 
-sep_5_pos_type_scr <- sep_5_pos_type %>%
-  filter(background == 'scramble pGL4') %>%
-  dcast(position ~ type, value.var = 'ave_induction') %>%
-  mutate(weak_diff = weak - first(consensus)) %>%
-  mutate(nosite_diff = none - first(consensus)) %>%
-  select(position, weak_diff, nosite_diff) %>%
-  mutate(background = 'scramble pGL4')
+ggplot(ind_site_p_r, aes(ave_ratio_25_norm, pred,
+                         fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted expression') +
+  annotate("text", x = 1.6, y = 4, 
+           label = paste('r =', 
+                         round(cor(ind_site_p_r$pred,
+                                   ind_site_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
 
-p_cons_diff_25_scr4 <- ggplot(filter(sep_5_pos_type_scr, position != 0)) +
-  geom_point(aes(position, weak_diff), color = '#56B4E9') +
-  geom_point(aes(position, nosite_diff), color = 'gray') +
-  geom_hline(yintercept = 0) + 
-  ylab('∆ Induction\nfrom site change') +
-  ggtitle('Scramble pGL4')
+#All independent sites, with independent background variable
 
-sep_5_pos_type_chr5 <- sep_5_pos_type %>%
-  filter(background == 'vista chr5') %>%
-  dcast(position ~ type, value.var = 'ave_induction') %>%
-  mutate(weak_diff = weak - first(consensus)) %>%
-  mutate(nosite_diff = none - first(consensus)) %>%
-  select(position, weak_diff, nosite_diff) %>%
-  mutate(background = 'vista chr5')
+ind_site_ind_back <- function(df) {
+  model <- lm(ave_ratio_25_norm ~ 
+                site1 + site2 + site3 + site4 + site5 + site6 + background, 
+              data = df)
+}
 
-p_cons_diff_25_chr5 <- ggplot(filter(sep_5_pos_type_chr5, position != 0)) +
-  geom_point(aes(position, weak_diff), color = '#56B4E9') +
-  geom_point(aes(position, nosite_diff), color = 'gray') +
-  geom_hline(yintercept = 0) + 
-  ylab('∆ Induction\nfrom site change') +
-  ggtitle('Vista Chr5')
+ind_site_ind_back_fit <- ind_site_ind_back(bin_site_s5)
+summary(ind_site_ind_back_fit)
+anova(ind_site_ind_back_fit)
+ind_site_ind_back_p_r <- pred_resid(bin_site_s5, ind_site_ind_back_fit)
 
-sep_5_pos_type_chr9 <- sep_5_pos_type %>%
-  filter(background == 'vista chr9') %>%
-  dcast(position ~ type, value.var = 'ave_induction') %>%
-  mutate(weak_diff = weak - first(consensus)) %>%
-  mutate(nosite_diff = none - first(consensus)) %>%
-  select(position, weak_diff, nosite_diff) %>%
-  mutate(background = 'vista chr9')
+ggplot(ind_site_ind_back_p_r, aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
 
-p_cons_diff_25_chr9 <- ggplot(filter(sep_5_pos_type_chr9, position != 0)) +
-  geom_point(aes(position, weak_diff), color = '#56B4E9') +
-  geom_point(aes(position, nosite_diff), color = 'gray') +
-  geom_hline(yintercept = 0) + 
-  ylab('∆ Induction\nfrom site change') +
-  ggtitle('Vista Chr9')
+p_ind_site_ind_back <- ggplot(ind_site_ind_back_p_r, aes(ave_ratio_25_norm, pred,
+                                                         fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted expression') +
+  scale_y_continuous(limits = c(-1, 7.5)) +
+  annotate("text", x = 1, y = 5, 
+           label = paste('r =', 
+                         round(cor(ind_site_ind_back_p_r$pred,
+                                   ind_site_ind_back_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
 
-p_cond_diff_25_all <- plot_grid(p_cons_diff_25_chr5, 
-                                 p_cons_diff_25_scr4, ncol = 2)
+p_tsite_indsite <- plot_grid(p_totsite_ind_back_r, 
+                             p_ind_site_ind_back, nrow = 2)
 
-save_plot('plots/cond_diff_25_all.png',
-          p_cond_diff_25_all, scale = 0.3, 
-          base_width = 28, base_height = 10)
+save_plot('plots/p_tsite_indsite.png', p_tsite_indsite, 
+          base_width = 5, base_height = 7, scale = 1.2)
+
+#All independent sites, dependent background, not sure how useful this one is,
+#again, too many parameters to fit to
+
+ind_site_dep_back <- function(df) {
+  model <- lm(ave_ratio_25_norm ~ 
+                (site1 + site2 + site3 + site4 + site5 + site6) * background, 
+              data = df)
+}
+
+ind_site_dep_back_fit <- ind_site_dep_back(bin_site_s5)
+summary(ind_site_dep_back_fit)
+anova(ind_site_dep_back_fit)
+ind_site_dep_back_p_r <- pred_resid(bin_site_s5, ind_site_dep_back_fit)
+
+ggplot(ind_site_dep_back_p_r, aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
+
+ggplot(ind_site_dep_back_p_r, aes(ave_ratio_25_norm, pred,
+                                  fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted expression') +
+  annotate("text", x = 1.6, y = 4, 
+           label = paste('r =', 
+                         round(cor(ind_site_dep_back_p_r$pred,
+                                   ind_site_dep_back_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
+
+#All dependent sites, independent background, this essentially just over-fits 
+#the data, looks good though
+
+dep_site_ind_back <- function(df) {
+  model <- lm(ave_ratio_25_norm ~ 
+                site1 * site2 * site3 * site4 * site5 * site6 + background, 
+              data = df)
+}
+
+mm <- model_matrix(bin_site_s5, ave_ratio_25_norm ~ 
+                     site1 * site2 * site3 * site4 * site5 * site6 + background)
+
+dep_site_ind_back_fit <- dep_site_ind_back(bin_site_s5)
+test <- summary(dep_site_ind_back_fit)
+anova(dep_site_ind_back_fit)
+dep_site_ind_back_p_r <- pred_resid(bin_site_s5, dep_site_ind_back_fit)
+
+ggplot(dep_site_ind_back_p_r, aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
+
+ggplot(dep_site_ind_back_p_r, aes(ave_ratio_25_norm, pred,
+                                  fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted expression') +
+  annotate("text", x = 1.6, y = 4, 
+           label = paste('r =', 
+                         round(cor(dep_site_ind_back_p_r$pred,
+                                   dep_site_ind_back_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
+
+#Non-linear models
+
+hill_like_model <- function(df) {
+  n_init <- 1
+  site_half_max_init <- 1
+  max_ave_ratio_25_norm_init <- 60
+  hill_nls <- nls(
+    ave_ratio_25_norm ~ I(max_ave_ratio_25_norm * (total_sites)^n) / I(site_half_max + (total_sites)^n), 
+    data = df, start = c(site_half_max = site_half_max_init, n = n_init,
+                         max_ave_ratio_25_norm = max_ave_ratio_25_norm_init))
+  return(hill_nls)
+}
+
+hill_total_site_ind_back_fit <- hill_like_model(bin_site_s5)
+summary(hill_total_site_ind_back_fit)
+hill_total_site_ind_back_p_r <- pred_resid(bin_site_s5, 
+                                           hill_total_site_ind_back_fit)
+
+ggplot(hill_total_site_ind_back_p_r, aes(ave_ratio_25_norm, pred, 
+                                         fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted expression') +
+  annotate("text", x = 1.6, y = 4, 
+           label = paste('r =', 
+                         round(cor(hill_total_site_ind_back_p_r$pred,
+                                   hill_total_site_ind_back_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
+
+log_curve_model <- function(df) {
+  n_init <- 1
+  site_half_max_init <- 1
+  max_ave_ratio_25_norm_init <- 60
+  log_curve_nls <- nls(
+    ave_ratio_25_norm ~ max_ave_ratio_25_norm/(1 + exp(-n * (total_sites - site_half_max))),
+    data = df, start = c(n = n_init, site_half_max = site_half_max_init, 
+                         max_ave_ratio_25_norm = max_ave_ratio_25_norm_init))
+  return(log_curve_nls)
+}
+
+log_curve_fit <- log_curve_model(bin_site_s5)
+summary(log_curve_fit)
+log_curve_p_r <- pred_resid(bin_site_s5, log_curve_fit)
+
+ggplot(log_curve_p_r , aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
+
+p_log_curve <- ggplot(log_curve_p_r, aes(ave_ratio_25_norm, pred, fill = total_sites)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted expression') +
+  scale_y_continuous(limits = c(-1, 7.5)) +
+  annotate("text", x = 1, y = 5, 
+           label = paste('r =', 
+                         round(cor(log_curve_p_r$pred,
+                                   log_curve_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
+
 
 #Median calculations of Expression----------------------------------------------
 
@@ -1906,6 +2036,75 @@ consensus_1_sp5 <- sep_5 %>%
   filter(consensus == 1, weak == 0) %>%
   mutate(site_fill = ifelse(site1 = consensus, 1, 0))
 ggplot(consensus_1_sp5, aes())
+
+#Plot change in induction from consensus to weak or no_site starting at
+#all 6 sites being filled with consensus. Do this per background
+library('reshape2')
+
+sep_5_pos_type <- sep_5 %>%
+  filter(consensus >= 5) %>%
+  mutate(position = 0) %>%
+  mutate(type = 'consensus') %>%
+  mutate(position = ifelse(site1 != 'consensus', 1, position)) %>%
+  mutate(position = ifelse(site2 != 'consensus', 2, position)) %>%
+  mutate(position = ifelse(site3 != 'consensus', 3, position)) %>%
+  mutate(position = ifelse(site4 != 'consensus', 4, position)) %>%
+  mutate(position = ifelse(site5 != 'consensus', 5, position)) %>%
+  mutate(position = ifelse(site6 != 'consensus', 6, position)) %>%
+  mutate(type = ifelse(weak == 1, 'weak', type)) %>%
+  mutate(type = ifelse(nosite == 1, 'none', type))
+
+sep_5_pos_type_scr <- sep_5_pos_type %>%
+  filter(background == 'scramble pGL4') %>%
+  dcast(position ~ type, value.var = 'ave_induction') %>%
+  mutate(weak_diff = weak - first(consensus)) %>%
+  mutate(nosite_diff = none - first(consensus)) %>%
+  select(position, weak_diff, nosite_diff) %>%
+  mutate(background = 'scramble pGL4')
+
+p_cons_diff_25_scr4 <- ggplot(filter(sep_5_pos_type_scr, position != 0)) +
+  geom_point(aes(position, weak_diff), color = '#56B4E9') +
+  geom_point(aes(position, nosite_diff), color = 'gray') +
+  geom_hline(yintercept = 0) + 
+  ylab('∆ Induction\nfrom site change') +
+  ggtitle('Scramble pGL4')
+
+sep_5_pos_type_chr5 <- sep_5_pos_type %>%
+  filter(background == 'vista chr5') %>%
+  dcast(position ~ type, value.var = 'ave_induction') %>%
+  mutate(weak_diff = weak - first(consensus)) %>%
+  mutate(nosite_diff = none - first(consensus)) %>%
+  select(position, weak_diff, nosite_diff) %>%
+  mutate(background = 'vista chr5')
+
+p_cons_diff_25_chr5 <- ggplot(filter(sep_5_pos_type_chr5, position != 0)) +
+  geom_point(aes(position, weak_diff), color = '#56B4E9') +
+  geom_point(aes(position, nosite_diff), color = 'gray') +
+  geom_hline(yintercept = 0) + 
+  ylab('∆ Induction\nfrom site change') +
+  ggtitle('Vista Chr5')
+
+sep_5_pos_type_chr9 <- sep_5_pos_type %>%
+  filter(background == 'vista chr9') %>%
+  dcast(position ~ type, value.var = 'ave_induction') %>%
+  mutate(weak_diff = weak - first(consensus)) %>%
+  mutate(nosite_diff = none - first(consensus)) %>%
+  select(position, weak_diff, nosite_diff) %>%
+  mutate(background = 'vista chr9')
+
+p_cons_diff_25_chr9 <- ggplot(filter(sep_5_pos_type_chr9, position != 0)) +
+  geom_point(aes(position, weak_diff), color = '#56B4E9') +
+  geom_point(aes(position, nosite_diff), color = 'gray') +
+  geom_hline(yintercept = 0) + 
+  ylab('∆ Induction\nfrom site change') +
+  ggtitle('Vista Chr9')
+
+p_cond_diff_25_all <- plot_grid(p_cons_diff_25_chr5, 
+                                p_cons_diff_25_scr4, ncol = 2)
+
+save_plot('plots/cond_diff_25_all.png',
+          p_cond_diff_25_all, scale = 0.3, 
+          base_width = 28, base_height = 10)
 
 #sample a certain amount to make plotting easier
 p_inducedBCrep <- bc_rep_1_2 %>%
