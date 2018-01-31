@@ -6,6 +6,7 @@ library(ggExtra)
 library(modelr)
 library(lazyeval)
 library(splines)
+library(broom)
 
 cbPalette7 <- c('#440154FF', '#39568CFF', '#287D8EFF', '#20A387FF', '#73D055FF',
                 '#B8DE29FF', '#FDE725FF')
@@ -1168,6 +1169,64 @@ p_tsite_indsite <- plot_grid(p_totsite_ind_back_r,
 
 save_plot('plots/p_tsite_indsite.png', p_tsite_indsite, 
           base_width = 5, base_height = 7, scale = 1.2)
+
+#Including weak sites, all independent, independent background 
+
+subpool5_log2 <- var_log2(subpool5)
+
+ind_site_ind_back_fit_nwc <- ind_site_ind_back(subpool5_log2)
+summary(ind_site_ind_back_fit_nwc)
+summary_nwc <- tidy(ind_site_ind_back_fit_nwc) %>%
+  filter(str_detect(term, '^site')) %>%
+  mutate(term = gsub('nosite', '_nosite', term)) %>%
+  mutate(term = gsub('weak', '_weak', term)) %>%
+  separate(term, into = c('site', 'type'), sep = "_")
+
+anova_nwc <- tidy(anova(ind_site_ind_back_fit_nwc))
+
+ind_site_ind_back_nwc_p_r <- pred_resid(subpool5_log2, ind_site_ind_back_fit_nwc)
+
+ggplot(ind_site_ind_back_nwc_p_r, aes(x = as.factor(total_sites))) +
+  facet_grid(. ~ background) +
+  geom_boxplot(aes(y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(y = pred), color = 'red')
+
+p_ind_site_ind_back_nwc <- ggplot(ind_site_ind_back_nwc_p_r, 
+                                  aes(ave_ratio_25_norm, pred, 
+                                      fill = consensus)) +
+  geom_point(shape = 21, alpha = 0.5) +
+  scale_fill_viridis() +
+  annotation_logticks(sides = 'bl') +
+  xlab('log2 observed expression') + ylab('log2 predicted\nexpression') +
+  scale_y_continuous(limits = c(-1.5, 8.5)) +
+  annotate("text", x = 1, y = 5, 
+           label = paste('r =', 
+                         round(cor(ind_site_ind_back_nwc_p_r$pred,
+                                   ind_site_ind_back_nwc_p_r$ave_ratio_25_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
+
+p_ind_site_ind_back_nwc_sum <- ggplot(summary_nwc, aes(site, estimate, fill = type)) + 
+  geom_bar(stat = 'identity', position = 'dodge') + 
+  scale_x_discrete(position = 'top') + 
+  scale_fill_viridis(discrete = TRUE) + 
+  ylab('log2 weight relative\nto consensus')
+
+p_ind_site_ind_back_nwc_anova <- anova_nwc %>% 
+  mutate(term_fctr = factor(term, levels = term)) %>% 
+  ggplot(aes(term_fctr, sumsq)) + 
+    geom_bar(stat = 'identity') + 
+  ylab('Sum of squares') +
+  xlab('Model term') + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_ind_sit_ind_back_nwc_grid <- plot_grid(p_ind_site_ind_back_nwc, 
+          p_ind_site_ind_back_nwc_sum, 
+          p_ind_site_ind_back_nwc_anova,
+          nrow = 3)
+
+save_plot('plots/p_ind_sit_ind_back_nwc_grid.png', p_ind_sit_ind_back_nwc_grid,
+          base_width = 5, base_height = 8)
 
 #All independent sites, dependent background, not sure how useful this one is,
 #again, too many parameters to fit to
