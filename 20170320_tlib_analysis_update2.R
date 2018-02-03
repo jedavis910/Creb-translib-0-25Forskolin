@@ -183,7 +183,7 @@ var_log2 <- function(df) {
 
 var_log10 <- function(df) {
   log_ratio_df <- df %>% 
-    mutate_if(is.double, funs(log2(.)))
+    mutate_if(is.double, funs(log10(.)))
   return(log_ratio_df)
 }
 
@@ -216,7 +216,10 @@ subpool2 <-
   separate(name, into = c("fluff1", "site", "fluff2", "dist", "fluff3"),
            sep = "_", convert = TRUE) %>% 
   select(-fluff1, -fluff2, -fluff3) %>%
-  mutate(dist = ifelse(startsWith(site, 'consensusflank'), dist + 2, dist))
+  mutate(dist = ifelse(startsWith(site, 'consensusflank'), dist + 2, dist)) %>%
+  group_by(background, site) %>%
+  mutate(mean_ave_25_exp = mean(ave_ratio_25_norm)) %>%
+  mutate(ave_25_exp_norm_mean = ave_ratio_25_norm/mean_ave_25_exp)
 
 #Subpool 3 contains 2 consensus binding sites with flanks (ATTGACGTCAGC) that 
 #vary in distance from one another by 0 (no inner flanks), 5, 10, 15, 20 and 70 
@@ -457,6 +460,65 @@ p_rep_backnorm_ratio_0_25 <- plot_grid(p_rep_backnorm_ratio_0,
 save_plot('plots/p_rep_backnorm_ratio_0_25.png', p_rep_backnorm_ratio_0_25,
           base_width = 10.5, base_height = 7)
 
+#Replicate plots for sp5 for CMB presentation
+
+p_rep_backnorm_ratio_0_sp5 <- ggplot(data = filter(log10_rep_1_2_back_norm, 
+                                                 subpool == 'subpool5'),
+                                   aes(ratio_0A_norm, ratio_0B_norm)) +
+  geom_point(color = '#440154FF', alpha = 0.3) +
+  geom_density2d(data = log10_rep_1_2_back_norm, 
+                 color = 'black', size = 0.2, bins = 10) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 background-norm.\nsum RNA/DNA BR 1") +
+  ylab("log10 background-norm.\nsum RNA/DNA BR 2") +
+  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
+  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 0.5, y = 1.5, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_back_norm, 
+                                          subpool == 'subpool5')$ratio_0A_norm,
+                                   filter(log10_rep_1_2_back_norm, 
+                                          subpool == 'subpool5')$ratio_0B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) 
+
+p_rep_backnorm_ratio_25_sp5 <- ggplot(data = filter(log10_rep_1_2_back_norm, 
+                                                   subpool == 'subpool5'),
+                                     aes(ratio_25A_norm, ratio_25B_norm)) +
+  geom_point(color = '#440154FF', alpha = 0.3) +
+  geom_density2d(data = log10_rep_1_2_back_norm, 
+                 color = 'black', size = 0.2, bins = 10) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 background-norm.\nsum RNA/DNA BR 1") +
+  ylab("log10 background-norm.\nsum RNA/DNA BR 2") +
+  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
+  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 0.5, y = 1.5, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(log10_rep_1_2_back_norm, 
+                                          subpool == 'subpool5')$ratio_25A_norm,
+                                   filter(log10_rep_1_2_back_norm, 
+                                          subpool == 'subpool5')$ratio_25B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
+
+p_rep_backnorm_ratio_0_25_sp5 <- plot_grid(p_rep_backnorm_ratio_0_sp5, 
+                                       p_rep_backnorm_ratio_25_sp5, 
+                                       nrow = 2, scale = 0.9)
+
+save_plot('plots/p_rep_backnorm_ratio_0_25_sp5.png', 
+          p_rep_backnorm_ratio_0_25_sp5, base_width = 3.5, base_height = 7)
+
+#Showing what library looks like before and after normalizing to background
+
 induction_noback <- rep_1_2 %>%
   mutate(ave_sum_RNA_0 = (sum_RNA_0A + sum_RNA_0B)/2) %>%
   mutate(ave_sum_RNA_25 = (sum_RNA_25A + sum_RNA_25B)/2) %>%
@@ -489,7 +551,74 @@ save_plot('plots/p_induction_back_compare.png', p_induction_back_compare,
           base_width = 9, base_height = 5)
 
 
-#Barcode analysis--------------------------------------------------------------
+#Comparison to integrated-------------------------------------------------------
+
+int_back_norm_rep_1_2 <- read_tsv('../20171129_intLib/int_back_norm_rep_1_2.txt')
+
+int_trans <- left_join(int_back_norm_rep_1_2, trans_back_norm_rep_0_22, 
+                       by = c('subpool', 'name', 'most_common', 'background'))
+
+#Analyzing 1-site expression patterns in subpool5
+
+subpool5_int <- 
+  filter(int_back_norm_rep_1_2, subpool == "subpool5") %>%
+  ungroup () %>%
+  select(-subpool) %>%
+  mutate(name = gsub('no_site', 'nosite', name)) %>%
+  separate(name, into = c(
+    "subpool", "site1", "site2", "site3", "site4", "site5", "site6", "fluff"), 
+    sep = "_") %>%
+  select(-subpool, -fluff) %>%
+  mutate(consensus = str_detect(site1, "consensus") + 
+           str_detect(site2, "consensus") + 
+           str_detect(site3, "consensus") + 
+           str_detect(site4, "consensus") + 
+           str_detect(site5, "consensus") + 
+           str_detect(site6, "consensus")) %>%
+  mutate(weak = str_detect(site1, "weak") +
+           str_detect(site2, "weak") +
+           str_detect(site3, "weak") +
+           str_detect(site4, "weak") +
+           str_detect(site5, "weak") +
+           str_detect(site6, "weak")) %>%
+  mutate(nosite = str_detect(site1, "nosite") +
+           str_detect(site2, "nosite") +
+           str_detect(site3, "nosite") +
+           str_detect(site4, "nosite") +
+           str_detect(site5, "nosite") +
+           str_detect(site6, "nosite")) %>%
+  mutate(total_sites = consensus + weak) %>%
+  mutate(site_combo = ifelse(weak == 0 & consensus > 0, 
+                             'consensus', 
+                             'mixed')) %>%
+  mutate(site_type = ifelse(consensus == 0 & weak > 0, 
+                            'weak', 
+                            site_combo))
+
+s5_single_site_exp_int <- subpool5_int %>%
+  filter(weak == 0 & consensus == 1) %>%
+  mutate(site1 = str_detect(site1, "consensus") * 1) %>%
+  mutate(site2 = str_detect(site2, "consensus") * 2) %>%
+  mutate(site3 = str_detect(site3, "consensus") * 3) %>%
+  mutate(site4 = str_detect(site4, "consensus") * 4) %>%
+  mutate(site5 = str_detect(site5, "consensus") * 5) %>%
+  mutate(site6 = str_detect(site6, "consensus") * 6) %>%
+  mutate(site = site1 + site2 + site3 + site4 + site5 + site6)
+
+p_s5_single_site_exp_int <- ggplot(s5_single_site_exp_int, 
+                               aes(as.factor(site), ave_med_ratio_norm)) +
+  geom_bar(stat = 'identity', fill = '#440154FF') +
+  facet_grid(. ~ background) +
+  xlab('Site position') + 
+  panel_border() +
+  ylab('Average background-normalized\nmedian RNA/DNA at 25 µM') +
+  geom_hline(yintercept = 1, color = 'gray')
+
+save_plot('plots/p_s5_single_site_exp.png', p_s5_single_site_exp,
+          scale = 1.2, base_width = 4.5, base_height = 3)
+
+
+#Barcode analysis---------------------------------------------------------------
 
 #Plot reads per BC
 sample_DNA <- filter(bc_join_DNA, num_reads > 0)
@@ -646,25 +775,15 @@ save_plot('plots/m_control_3_5_0_25.png',
 
 #Subpool 2
 
-p_subpool2_dist_0_25 <- ggplot(filter(sep_2, 
-                                           site == 'consensusflank')) + 
+p_subpool2_dist_0_25 <- ggplot(filter(subpool2, site == 'consensusflank')) + 
   facet_grid(~ background) + 
-  geom_point(aes(dist, ratio_0_1), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_0_2), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_25_1), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
-  geom_point(aes(dist, ratio_25_2), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
-  geom_smooth(aes(dist, ave_ratio_0), span = 0.1, size = 0.4,
-              se = FALSE, color = '#999999') +
-  geom_smooth(aes(dist, ave_ratio_25), span = 0.1, size = 0.4,
+  geom_point(aes(dist, ave_25_exp_norm_mean), alpha = 0.5) +
+  geom_hline(yintercept = 1) +
+  geom_smooth(aes(dist, ave_25_exp_norm_mean), span = 0.1, size = 0.4,
               se = FALSE, color = '#56B4E9') +
   scale_x_continuous("Distance from Proximal Promoter End (bp)", 
-                     breaks = seq(from = 0, to = 150, by = 10)
-                     ) +
-  panel_border() + ylab('Expression') +
+                     breaks = seq(from = 0, to = 150, by = 10)) +
+  panel_border() + ylab('Ave expression at\n25 µM norm. to mean') +
   background_grid(major = 'xy', minor = 'none')
 
 save_plot('plots/subpool2_dist_0_25.png',
@@ -775,10 +894,26 @@ save_plot('plots/subpool3_chr9_10_0_25.png',
 #plot combinations of consensus and weak vs. their induced expression as a 
 #function of the total number of sites filled
 
-p_num_sites_num_weak <- ggplot(subpool5, 
+p_num_sites_num_weak_c <- ggplot(filter(subpool5, weak == 0),
                                aes(x = as.factor(total_sites), 
-                                   y = ave_ratio_25_norm)
-                               ) +
+                                   y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
+               position = position_dodge(1)) +
+  facet_grid(background ~ .) + 
+  panel_border() +
+  scale_color_manual(values = cbPalette7) +
+  annotation_logticks(sides = 'lr') +
+  background_grid(major = 'y', minor = 'none') + 
+  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
+  ylab('log10 background-normalized\nexpression at 25 µM') +
+  xlab('Number of binding sites')
+
+save_plot('plots/p_num_sites_num_weak_c.png', p_num_sites_num_weak_c, scale = 1.3,
+          base_width = 6, base_height = 4)
+
+p_num_sites_num_weak_cw1 <- ggplot(filter(subpool5, weak <= 1),
+                                 aes(x = as.factor(total_sites), 
+                                     y = ave_ratio_25_norm)) +
   geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
                position = position_dodge(1)) +
   scale_y_log10() +
@@ -788,10 +923,46 @@ p_num_sites_num_weak <- ggplot(subpool5,
   annotation_logticks(sides = 'lr') +
   background_grid(major = 'y', minor = 'none') + 
   geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('log10 expression at 25 µM') +
+  ylab('log10 background-normalized\nexpression at 25 µM') +
   xlab('Number of binding sites')
 
-save_plot('plots/p_num_sites_num_weak.png', p_num_sites_num_weak, scale = 1.3,
+save_plot('plots/p_num_sites_num_weak_cw1.png', p_num_sites_num_weak_cw1, scale = 1.3,
+          base_width = 6, base_height = 4)
+
+p_num_sites_num_weak_cw2 <- ggplot(filter(subpool5, weak <= 2),
+                                  aes(x = as.factor(total_sites), 
+                                      y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
+               position = position_dodge(1)) +
+  scale_y_log10() +
+  facet_grid(background ~ .) + 
+  panel_border() +
+  scale_color_manual(values = cbPalette7) +
+  annotation_logticks(sides = 'lr') +
+  background_grid(major = 'y', minor = 'none') + 
+  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
+  ylab('log10 background-normalized\nexpression at 25 µM') +
+  xlab('Number of binding sites')
+
+save_plot('plots/p_num_sites_num_weak_cw2.png', p_num_sites_num_weak_cw2, scale = 1.3,
+          base_width = 6, base_height = 4)
+
+p_num_sites_num_weak_cw6 <- ggplot(subpool5,
+                                  aes(x = as.factor(total_sites), 
+                                      y = ave_ratio_25_norm)) +
+  geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
+               position = position_dodge(1)) +
+  scale_y_log10() +
+  facet_grid(background ~ .) + 
+  panel_border() +
+  scale_color_manual(values = cbPalette7) +
+  annotation_logticks(sides = 'lr') +
+  background_grid(major = 'y', minor = 'none') + 
+  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
+  ylab('log10 background-normalized\nexpression at 25 µM') +
+  xlab('Number of binding sites')
+
+save_plot('plots/p_num_sites_num_weak_cw6.png', p_num_sites_num_weak_cw6, scale = 1.3,
           base_width = 6, base_height = 4)
 
 
@@ -813,6 +984,10 @@ exp_25_greater_c6 <- function(df) {
 }
 
 subpool5_exp_25_greater_c6 <- exp_25_greater_c6(subpool5)
+
+subpool5_exp_25_greater_c6 %>%
+  group_by(background) %>%
+  summarize(sequences = n())
 
 #Count site type per site location
 
@@ -870,10 +1045,40 @@ p_site_exp_25_greater_c6 <- ggplot(subpool5_exp_25_greater_c6_sites,
   facet_grid(. ~ background) +
   geom_bar(stat = 'identity', position = 'fill') +
   scale_fill_viridis(discrete = TRUE) + 
-  xlab('Site position')
+  xlab('Site position') + 
+  panel_border()
 
 save_plot('plots/p_site_exp_25_greater_c6.png', p_site_exp_25_greater_c6, 
           base_width = 4, base_height = 2, scale = 1.5)
+
+compare_2_5 <- inner_join(subpool2, subpool5, 
+                          by = c('most_common', 'background', 'ratio_0A_back',
+                                 'ratio_0B_back', 'ratio_25A_back', 
+                                 'ratio_25B_back'),
+                          suffix = c('_sp2', '_sp5')) %>%
+  ungroup()
+
+s5_single_site_exp <- compare_2_5 %>%
+  filter(weak == 0 & consensus == 1) %>%
+  mutate(site1 = str_detect(site1, "consensus") * 1) %>%
+  mutate(site2 = str_detect(site2, "consensus") * 2) %>%
+  mutate(site3 = str_detect(site3, "consensus") * 3) %>%
+  mutate(site4 = str_detect(site4, "consensus") * 4) %>%
+  mutate(site5 = str_detect(site5, "consensus") * 5) %>%
+  mutate(site6 = str_detect(site6, "consensus") * 6) %>%
+  mutate(site = site1 + site2 + site3 + site4 + site5 + site6)
+
+p_s5_single_site_exp <- ggplot(s5_single_site_exp, 
+                               aes(as.factor(site), ave_25_exp_norm_mean)) +
+  geom_bar(stat = 'identity', fill = '#440154FF') +
+  facet_grid(. ~ background) +
+  xlab('Site position') + 
+  panel_border() +
+  ylab('Average expression at 25 µM\nnormalized to average 1-site expression') +
+  geom_hline(yintercept = 1, color = 'gray')
+
+save_plot('plots/p_s5_single_site_exp.png', p_s5_single_site_exp,
+          scale = 1.2, base_width = 4.5, base_height = 3)
 
 
 #Do weak sites operate as no_sites or do they still contribute to expression?
@@ -900,11 +1105,11 @@ save_plot('plots/p_num_cons_num_weak.png', p_num_cons_num_weak, scale = 1.3,
 #Look at site architecture changes per background per n% population bins that 
 #span induced expression
 
-s5_binned_exp_25 <- subpool5 %>%
+s5_binned_exp_25_back <- subpool5 %>%
   group_by(background) %>%
-  mutate(bin = ntile(ave_ratio_25_norm, 5))
+  mutate(bin = ntile(ave_ratio_25_norm, 10))
 
-site_loc_type_count_bin <- function(df) {
+site_loc_type_count_back_bin <- function(df) {
   site1 <- df %>%
     group_by(background, bin) %>%
     count(site1, site1 == 'consensus') %>%
@@ -951,12 +1156,81 @@ site_loc_type_count_bin <- function(df) {
   return(site_join)
 }
 
-s5_binned_exp_25_sites <- site_loc_type_count_bin(s5_binned_exp_25)
+s5_binned_exp_25_back_sites <- site_loc_type_count_back_bin(s5_binned_exp_25_back)
 
-p_s5_binned_exp_25_sites <- ggplot(s5_binned_exp_25_sites,
+p_s5_binned_exp_25_back_sites <- ggplot(s5_binned_exp_25_back_sites,
                                    aes(as.factor(site), counts, fill = type)) +
   facet_grid(background ~ bin) +
   geom_bar(stat = 'identity', position = 'fill') +
+  scale_fill_viridis(discrete = TRUE) + 
+  xlab('Site position')
+
+#Binning by expression alone
+
+s5_binned_exp_25 <- subpool5 %>%
+  mutate(bin = ntile(ave_ratio_25_norm, 5))
+
+ggplot(s5_binned_exp_25, aes(ratio_25A_norm, ratio_25B_norm, fill = bin)) +
+  facet_grid(background ~ bin) + 
+  scale_fill_viridis() +
+  panel_border() +
+  scale_x_log10() + scale_y_log10() +
+  geom_point(alpha = 0.3, shape = 21)
+
+site_loc_type_count_bin <- function(df) {
+  site1 <- df %>%
+    group_by(bin) %>%
+    count(site1, site1 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site1) %>%
+    select(-3) %>%
+    mutate(site = 1)
+  site2 <- df %>%
+    group_by(bin) %>%
+    count(site2, site2 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site2) %>%
+    select(-3) %>%
+    mutate(site = 2)
+  site3 <- df %>%
+    group_by(bin) %>%
+    count(site3, site3 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site3) %>%
+    select(-3) %>%
+    mutate(site = 3)
+  site4 <- df %>%
+    group_by(bin) %>%
+    count(site4, site4 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site4) %>%
+    select(-3) %>%
+    mutate(site = 4)
+  site5 <- df %>%
+    group_by(bin) %>%
+    count(site5, site5 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site5) %>%
+    select(-3) %>%
+    mutate(site = 5)
+  site6 <- df %>%
+    group_by(bin) %>%
+    count(site6, site6 == 'consensus') %>%
+    rename(counts = n) %>%
+    rename(type = site6) %>%
+    select(-3) %>%
+    mutate(site = 6)
+  site_join <- bind_rows(site1, site2, site3, site4, site5, site6)
+  return(site_join)
+}
+
+s5_binned_exp_25_sites <- site_loc_type_count_bin(s5_binned_exp_25)
+
+p_s5_binned_exp_25_sites <- ggplot(filter(s5_binned_exp_25_sites, 
+                                          type == 'consensus'),
+                                   aes(as.factor(site), counts, fill = type)) +
+  facet_grid(. ~ bin) +
+  geom_bar(stat = 'identity', position = 'dodge') +
   scale_fill_viridis(discrete = TRUE) + 
   xlab('Site position')
 
