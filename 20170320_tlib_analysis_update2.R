@@ -211,15 +211,19 @@ log10_rep_1_2_back_norm <- var_log10(rep_1_2_back_norm) %>%
 subpool2 <- 
   filter(rep_1_2_back_norm, subpool == "subpool2") %>%
   ungroup() %>%
-  ungroup () %>%
   select(-subpool) %>%
   separate(name, into = c("fluff1", "site", "fluff2", "dist", "fluff3"),
            sep = "_", convert = TRUE) %>% 
   select(-fluff1, -fluff2, -fluff3) %>%
   mutate(dist = ifelse(startsWith(site, 'consensusflank'), dist + 2, dist)) %>%
   group_by(background, site) %>%
-  mutate(mean_ave_25_exp = mean(ave_ratio_25_norm)) %>%
-  mutate(ave_25_exp_norm_mean = ave_ratio_25_norm/mean_ave_25_exp)
+  mutate(med_ratio_25A_norm = median(ratio_25A_norm)) %>%
+  mutate(med_ratio_25B_norm = median(ratio_25B_norm)) %>%
+  ungroup() %>%
+  mutate(ratio_25A_norm_med = ratio_25A_norm/med_ratio_25A_norm) %>%
+  mutate(ratio_25B_norm_med = ratio_25B_norm/med_ratio_25B_norm) %>%
+  mutate(ave_ratio_25_norm_med = (ratio_25A_norm_med + ratio_25B_norm_med)/2)
+
 
 #Subpool 3 contains 2 consensus binding sites with flanks (ATTGACGTCAGC) that 
 #vary in distance from one another by 0 (no inner flanks), 5, 10, 15, 20 and 70 
@@ -777,13 +781,16 @@ save_plot('plots/m_control_3_5_0_25.png',
 
 p_subpool2_dist_0_25 <- ggplot(filter(subpool2, site == 'consensusflank')) + 
   facet_grid(~ background) + 
-  geom_point(aes(dist, ave_25_exp_norm_mean), alpha = 0.5) +
+  geom_point(aes(dist, ratio_25A_norm_med), 
+             alpha = 0.5, color = '#287D8EFF') +
+  geom_point(aes(dist, ratio_25B_norm_med), 
+             alpha = 0.5, color = '#73D055FF') +
   geom_hline(yintercept = 1) +
-  geom_smooth(aes(dist, ave_25_exp_norm_mean), span = 0.1, size = 0.4,
-              se = FALSE, color = '#56B4E9') +
+  geom_smooth(aes(dist, ave_ratio_25_norm_med), span = 0.1, size = 0.4,
+              se = FALSE, color = '#440154FF') +
   scale_x_continuous("Distance from Proximal Promoter End (bp)", 
                      breaks = seq(from = 0, to = 150, by = 10)) +
-  panel_border() + ylab('Ave expression at\n25 µM norm. to mean') +
+  panel_border() + ylab('Expression at\n25 µM norm. to median') +
   background_grid(major = 'xy', minor = 'none')
 
 save_plot('plots/subpool2_dist_0_25.png',
@@ -1069,12 +1076,17 @@ s5_single_site_exp <- compare_2_5 %>%
   mutate(site = site1 + site2 + site3 + site4 + site5 + site6)
 
 p_s5_single_site_exp <- ggplot(s5_single_site_exp, 
-                               aes(as.factor(site), ave_25_exp_norm_mean)) +
-  geom_bar(stat = 'identity', fill = '#440154FF') +
+                               aes(x = as.factor(site))) +
+  geom_bar(aes(y = ave_ratio_25_norm_med),
+           stat = 'identity', fill = '#440154FF') +
+  geom_point(aes(y = ratio_25A_norm_med), 
+             fill = '#20A387FF', shape = 21, size = 2) +
+  geom_point(aes(y = ratio_25B_norm_med), 
+             fill = '#20A387FF', shape = 21, size = 2) +
   facet_grid(. ~ background) +
   xlab('Site position') + 
   panel_border() +
-  ylab('Average expression at 25 µM\nnormalized to average 1-site expression') +
+  ylab('Expression at 25 µM normalized\nto median 1-site expression') +
   geom_hline(yintercept = 1, color = 'gray')
 
 save_plot('plots/p_s5_single_site_exp.png', p_s5_single_site_exp,
@@ -1626,15 +1638,18 @@ p_log_curve <- ggplot(log_curve_p_r, aes(ave_ratio_25_norm, pred, fill = total_s
   annotation_logticks(sides = 'bl') +
   xlab('log2 observed expression') + ylab('log2 predicted expression') +
   scale_y_continuous(limits = c(-1, 7.5)) +
-  annotate("text", x = 1, y = 5, 
+  annotate("text", x = 1, y = 6, 
            label = paste('r =', 
                          round(cor(log_curve_p_r$pred,
                                    log_curve_p_r$ave_ratio_25_norm,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"), 2)))
 
+save_plot('plots/p_log_curve.png', p_log_curve, 
+          base_width = 4, base_height = 3, scale = 1.2)
 
-#Median calculations of Expression----------------------------------------------
+
+#Pseudocount for median and geom. mean calculations of expression---------------
 
 #Re-do BC normalization to account for pseudocount of 1
 
@@ -1655,9 +1670,10 @@ pseudo_bc_join_R25B <- pseudo_bc_map_join_bc(barcode_map, bc_R25B)
 pseudo_bc_join_DNA <- pseudo_bc_map_join_bc(barcode_map, bc_DNA)
 
 
-#Filter DNA reads to set a minimum of 3 reads per BC, join with RNA
+#Filter DNA reads to set a minimum of 3 reads per BC (4 with pseudocount), join 
+#with RNA
 
-dna_join_rna <- function(df1, df2) {
+bc_dna_join_rna <- function(df1, df2) {
   filter_reads_1 <- filter(df1, num_reads > 3) %>%
     rename(num_reads_DNA = num_reads) %>%
     rename(DNA_norm = norm)
@@ -1666,15 +1682,17 @@ dna_join_rna <- function(df1, df2) {
                                    "most_common")) %>%
     rename(num_reads_RNA = num_reads) %>%
     rename(RNA_norm = norm)
-  print('processed dfs in order of (DNA, RNA) in dna_join_rna(df1, df2)')
+  print('processed dfs in order of (DNA, RNA) in bc_dna_join_rna(df1, df2)')
   return(DNA_RNA_join)
 }
 
-RNA_DNA_med_R0A <- dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R0A)
-RNA_DNA_med_R0B <- dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R0B)
-RNA_DNA_med_R25A <- dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R25A)
-RNA_DNA_med_R25B <- dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R25B)
+RNA_DNA_bc_R0A <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R0A)
+RNA_DNA_bc_R0B <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R0B)
+RNA_DNA_bc_R25A <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R25A)
+RNA_DNA_bc_R25B <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R25B)
 
+
+#Median analysis of expression--------------------------------------------------
 
 #Count barcodes per variant, set minimum of 7 BC's per variant, determine 
 #RNA/DNA for each BC and take median RNA/DNA per variant
@@ -1694,10 +1712,10 @@ ratio_bc_med_var <- function(df1) {
   return(bc_med)
 }
 
-med_RNA_DNA_R0A <- ratio_bc_med_var(RNA_DNA_med_R0A)
-med_RNA_DNA_R0B <- ratio_bc_med_var(RNA_DNA_med_R0B)
-med_RNA_DNA_R25A <- ratio_bc_med_var(RNA_DNA_med_R25A)
-med_RNA_DNA_R25B <- ratio_bc_med_var(RNA_DNA_med_R25B)
+med_RNA_DNA_R0A <- ratio_bc_med_var(RNA_DNA_bc_R0A)
+med_RNA_DNA_R0B <- ratio_bc_med_var(RNA_DNA_bc_R0B)
+med_RNA_DNA_R25A <- ratio_bc_med_var(RNA_DNA_bc_R25A)
+med_RNA_DNA_R25B <- ratio_bc_med_var(RNA_DNA_bc_R25B)
 
 
 #Combine samples, only keeping variants present in each
@@ -1759,6 +1777,93 @@ med_rep_1_2_back_norm <- med_back_norm_1_ind_2(med_rep_1_2)
 log2_med_rep_1_2_back_norm <- var_log2(med_rep_1_2_back_norm)
 
 log10_med_rep_1_2_back_norm <- var_log10(med_rep_1_2_back_norm)
+
+
+#Geometric mean of expression---------------------------------------------------
+
+#Count barcodes per variant, set minimum of 7 BC's per variant, determine 
+#RNA/DNA for each BC and take geometric mean of RNA/DNA per variant
+
+ratio_bc_gm_var <- function(df1) {
+  bc_count <- df1 %>%
+    group_by(subpool, name, most_common) %>%
+    summarize(barcodes = n()) %>%
+    filter(barcodes > 7)
+  gm_ratio <- df1 %>%
+    mutate(ratio = RNA_norm/DNA_norm) %>%
+    group_by(subpool, name, most_common) %>%
+    summarize(gm_ratio = 10^(mean(log10(ratio))))
+  bc_gm <- inner_join(gm_ratio, bc_count, 
+                       by = c("name", "subpool", "most_common")
+  )
+  return(bc_gm)
+}
+
+gm_RNA_DNA_R0A <- ratio_bc_gm_var(RNA_DNA_bc_R0A)
+gm_RNA_DNA_R0B <- ratio_bc_gm_var(RNA_DNA_bc_R0B)
+gm_RNA_DNA_R25A <- ratio_bc_gm_var(RNA_DNA_bc_R25A)
+gm_RNA_DNA_R25B <- ratio_bc_gm_var(RNA_DNA_bc_R25B)
+
+
+#Combine samples, only keeping variants present in each
+
+gm_var_rep <- function(df0A, df0B, df25A, df25B) {
+  join_0 <- inner_join(df0A, df0B, 
+                       by = c("name", "subpool", "most_common"), 
+                       suffix = c("_0A", "_0B"))
+  join_25 <- inner_join(df25A, df25B, 
+                        by = c("name", "subpool", "most_common"), 
+                        suffix = c("_25A", "_25B"))
+  join_0_25 <- inner_join(join_0, join_25, 
+                          by = c("name", "subpool", "most_common"))
+  print('processed dfs in order: df0A, df0B, df25A, df25B')
+  return(join_0_25)
+}
+
+gm_rep_1_2 <- gm_var_rep(gm_RNA_DNA_R0A, gm_RNA_DNA_R0B, 
+                           gm_RNA_DNA_R25A, gm_RNA_DNA_R25B)
+
+#Normalize to background
+
+gm_back_norm_1_ind_2 <- function(df1) {
+  gsub_1_2 <- df1 %>%
+    ungroup () %>%
+    filter(subpool != 'control') %>%
+    mutate(
+      name = gsub('Smith R. Vista chr9:83712599-83712766', 'v chr9', name),
+      name = gsub('Vista Chr5:88673410-88674494', 'v chr5', name),
+      name = gsub('scramble pGL4.29 Promega 1-63 \\+ 1-87', 's pGl4', name)
+    ) %>%
+    mutate(background = name) %>%
+    mutate(background = str_sub(background, 
+                                nchar(background)-5, 
+                                nchar(background)))
+  backgrounds <- gsub_1_2 %>%
+    filter(startsWith(name, 
+                      'subpool5_no_site_no_site_no_site_no_site_no_site_no_site')) %>%
+    select(background, gm_ratio_0A, gm_ratio_0B, 
+           gm_ratio_25A, gm_ratio_25B) %>%
+    rename(gm_ratio_0A_back = gm_ratio_0A) %>%
+    rename(gm_ratio_0B_back = gm_ratio_0B) %>%
+    rename(gm_ratio_25A_back = gm_ratio_25A) %>%
+    rename(gm_ratio_25B_back = gm_ratio_25B)
+  back_join_norm <- left_join(gsub_1_2, backgrounds, by = 'background') %>%
+    mutate(gm_ratio_0A_norm = gm_ratio_0A/gm_ratio_0A_back) %>%
+    mutate(gm_ratio_0B_norm = gm_ratio_0B/gm_ratio_0B_back) %>%
+    mutate(gm_ratio_25A_norm = gm_ratio_25A/gm_ratio_25A_back) %>%
+    mutate(gm_ratio_25B_norm = gm_ratio_25B/gm_ratio_25B_back) %>%
+    mutate(ave_gm_ratio_0_norm = (gm_ratio_0A_norm + gm_ratio_0B_norm)/2) %>%
+    mutate(ave_gm_ratio_25_norm = (gm_ratio_25A_norm + gm_ratio_25B_norm)/2) %>%
+    mutate(induction = ave_gm_ratio_25_norm/ave_gm_ratio_0_norm) %>%
+    select(-barcodes_0B, -barcodes_25A, -barcodes_25B) %>%
+    rename(barcodes = barcodes_0A)
+}
+
+gm_rep_1_2_back_norm <- gm_back_norm_1_ind_2(gm_rep_1_2)
+
+log2_gm_rep_1_2_back_norm <- var_log2(gm_rep_1_2_back_norm)
+
+log10_gm_rep_1_2_back_norm <- var_log10(gm_rep_1_2_back_norm)
 
 
 #Join median and summed variant expression tables, compare median and summed
