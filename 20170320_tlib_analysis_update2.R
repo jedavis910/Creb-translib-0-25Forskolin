@@ -1661,10 +1661,10 @@ pseudo_bc_map_join_bc <- function(df1, df2) {
       is.na(num_reads),
       as.integer(0), 
       num_reads)) %>%
-    mutate(norm = if_else(
-        is.na(norm), 
+    mutate(normalized = if_else(
+        is.na(normalized), 
         as.double(0.1), 
-        as.double(norm + 0.1)))
+        as.double(normalized + 0.1)))
   return(keep_bc)
 }
 
@@ -1679,20 +1679,20 @@ pseudo_bc_join_DNA <- pseudo_bc_map_join_bc(barcode_map, bc_DNA)
 #RNA/DNA
 
 bc_dna_join_rna <- function(df1, df2) {
-  filter_reads <- filter(df1, num_reads > 2)
+  filter_reads <- filter(df1, num_reads > 5)
   DNA_RNA_join <- left_join(filter_reads, df2,
                             by = c("barcode", "name", "subpool", 
                                    "most_common"), 
                             suffix = c('_DNA', '_RNA')) %>%
-    mutate(ratio = norm_RNA/norm_DNA)
+    mutate(ratio = normalized_RNA/normalized_DNA)
   print('processed dfs in order of (DNA, RNA) in bc_dna_join_rna(df1, df2)')
   return(DNA_RNA_join)
 }
 
-RNA_DNA_bc_R0A <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R0A)
-RNA_DNA_bc_R0B <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R0B)
-RNA_DNA_bc_R25A <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R25A)
-RNA_DNA_bc_R25B <- bc_dna_join_rna(pseudo_bc_join_DNA, pseudo_bc_join_R25B)
+RNA_DNA_bc_R0A <- bc_dna_join_rna(bc_join_DNA, bc_join_R0A)
+RNA_DNA_bc_R0B <- bc_dna_join_rna(bc_join_DNA, bc_join_R0B)
+RNA_DNA_bc_R25A <- bc_dna_join_rna(bc_join_DNA, bc_join_R25A)
+RNA_DNA_bc_R25B <- bc_dna_join_rna(bc_join_DNA, bc_join_R25B)
 
 
 #Median analysis of expression--------------------------------------------------
@@ -1706,7 +1706,7 @@ ratio_bc_med_var <- function(df1) {
   bc_count_DNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     summarize(barcodes_DNA = n()) %>%
-    filter(barcodes_DNA > 7)
+    filter(barcodes_DNA > 4)
   bc_count_RNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     filter(num_reads_RNA != 0) %>%
@@ -1723,8 +1723,12 @@ ratio_bc_med_var <- function(df1) {
     summarize(mad = median(absdev))
   med_mad <- inner_join(med_ratio, mad_ratio, 
                         by = c('subpool', 'name', 'most_common')) %>%
-    mutate(mad_over_med = mad/med_ratio) %>%
-    filter(mad_over_med <= 1)
+    mutate(mad_over_med = as.double(mad/med_ratio)) %>%
+    mutate(mad_over_med = if_else(
+      is.na(mad_over_med),
+      as.double(0), 
+      mad_over_med)) %>%
+    filter(mad_over_med < as.double(1))
   bc_med <- inner_join(med_mad, bc_DNA_RNA, 
                        by = c('subpool', 'name', 'most_common')) %>%
     ungroup()
@@ -1735,6 +1739,46 @@ med_RNA_DNA_R0A <- ratio_bc_med_var(RNA_DNA_bc_R0A)
 med_RNA_DNA_R0B <- ratio_bc_med_var(RNA_DNA_bc_R0B)
 med_RNA_DNA_R25A <- ratio_bc_med_var(RNA_DNA_bc_R25A)
 med_RNA_DNA_R25B <- ratio_bc_med_var(RNA_DNA_bc_R25B)
+
+#What about all those noisy sequences removed?
+
+ratio_bc_med_var_rm <- function(df1) {
+  bc_count_DNA <- df1 %>%
+    group_by(subpool, name, most_common) %>%
+    summarize(barcodes_DNA = n()) %>%
+    filter(barcodes_DNA > 4)
+  bc_count_RNA <- df1 %>%
+    group_by(subpool, name, most_common) %>%
+    filter(num_reads_RNA != 0) %>%
+    summarize(barcodes_RNA = n())
+  bc_DNA_RNA <- inner_join(bc_count_DNA, bc_count_RNA, 
+                           by = c('subpool', 'name', 'most_common'))
+  med_ratio <- df1 %>%
+    group_by(subpool, name, most_common) %>%
+    summarize(med_ratio = median(ratio))
+  mad_ratio <- inner_join(df1, med_ratio, 
+                          by = c('subpool', 'name', 'most_common')) %>%
+    mutate(absdev = abs(ratio - med_ratio)) %>%
+    group_by(subpool, name, most_common) %>%
+    summarize(mad = median(absdev))
+  med_mad <- inner_join(med_ratio, mad_ratio, 
+                        by = c('subpool', 'name', 'most_common')) %>%
+    mutate(mad_over_med = as.double(mad/med_ratio)) %>%
+    mutate(mad_over_med = if_else(
+      is.na(mad_over_med),
+      as.double(0), 
+      mad_over_med)) %>%
+    filter(mad_over_med >= as.double(1))
+  bc_med <- inner_join(med_mad, bc_DNA_RNA, 
+                       by = c('subpool', 'name', 'most_common')) %>%
+    ungroup()
+  return(bc_med)
+}
+
+med_RNA_DNA_R0A_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R0A)
+med_RNA_DNA_R0B_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R0B)
+med_RNA_DNA_R25A_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R25A)
+med_RNA_DNA_R25B_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R25B)
 
 
 #Combine all samples
@@ -1756,6 +1800,125 @@ med_var_rep <- function(df0A, df0B, df25A, df25B) {
 
 med_rep_1_2 <- med_var_rep(med_RNA_DNA_R0A, med_RNA_DNA_R0B, 
                            med_RNA_DNA_R25A, med_RNA_DNA_R25B)
+
+test_back <- filter(med_rep_1_2, startsWith(name, 
+                               'subpool5_no_site_no_site_no_site_no_site_no_site_no_site'))
+
+med_mad_gather <- function(df1) {
+  med <- df1 %>%
+    select(subpool, name, med_ratio_0A, med_ratio_0B, med_ratio_25A, 
+           med_ratio_25B) %>%
+    gather(med_ratio_0A, med_ratio_0B, med_ratio_25A, med_ratio_25B,
+           key = condition, value = med) %>%
+    separate(condition, into = c("fluff1", "fluff2", "condition"),
+             sep = "_", convert = TRUE) %>% 
+    select(-fluff1, -fluff2)
+  mad_over_med <- df1 %>%
+    select(subpool, name, mad_over_med_0A, mad_over_med_0B, mad_over_med_25A, 
+           mad_over_med_25B) %>%
+    gather(mad_over_med_0A, mad_over_med_0B, mad_over_med_25A, mad_over_med_25B,
+           key = condition, value = mad_over_med) %>%
+    separate(condition, into = c("fluff1", "fluff2", "fluff3", "condition"),
+             sep = "_", convert = TRUE) %>% 
+    select(-fluff1, -fluff2, -fluff3)
+  med_mad <- inner_join(med, mad_over_med, 
+                        by = c('subpool', 'name', 'condition'))
+  return(med_mad)
+}
+
+med_mad_rep_1_2 <- med_mad_gather(med_rep_1_2)
+
+
+p_mad_over_med_distr <- ggplot(med_mad_rep_1_2, aes(mad_over_med)) +
+  geom_density(kernel = 'gaussian') +
+  facet_wrap(~ condition) + 
+  panel_border() +
+  xlab('MAD/Med')
+
+save_plot('plots/p_mad_over_med_distr.png', p_mad_over_med_distr,
+          base_width = 7, base_height = 5)
+
+p_med_vs_madmed <- ggplot(med_mad_rep_1_2, aes(med, mad_over_med)) +
+  geom_point(alpha = 0.3) +
+  geom_point(data = filter(med_mad_rep_1_2, startsWith(name, 
+                               'subpool5_no_site_no_site_no_site_no_site_no_site_no_site')),
+             color = 'red') +
+  facet_wrap(~ condition) + 
+  panel_border() +
+  xlab('Median') + ylab('MAD/Median')
+
+save_plot('plots/p_med_vs_madmed.png', p_med_vs_madmed,
+          base_width = 7, base_height = 5)
+
+
+#Compare med replicates and mad to sum, focusing on mad/median = 1 contribution 
+#to replicability
+
+sum_rep_1_2 <- rep_1_2 %>%
+    select(subpool, name, ratio_0A, ratio_0B, ratio_25A, ratio_25B) %>%
+    gather(ratio_0A, ratio_0B, ratio_25A, ratio_25B,
+           key = condition, value = sum) %>%
+    separate(condition, into = c("fluff1", "condition"),
+             sep = "_", convert = TRUE) %>% 
+    select(-fluff1)
+
+sum_med_var <- inner_join(sum_rep_1_2, med_mad_rep_1_2,
+                               by = c('subpool', 'name', 'condition')) %>%
+  filter(med != as.double(0))
+
+p_med_vs_sum_rep <- ggplot(sum_med_var, aes(med, sum)) +
+  facet_wrap(~ condition) +
+  geom_point(alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, mad_over_med == as.double(1)),
+             color = 'red') +
+  xlab("Median RNA/DNA") +
+  ylab("Sum RNA/DNA") +
+  scale_x_log10() + scale_y_log10() +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border() 
+
+p_med_rep_0 <- ggplot(med_rep_1_2, aes(med_ratio_0A, med_ratio_0B)) +
+  geom_point(alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2, mad_over_med_0A == as.double(1)),
+             color = 'red') +
+  geom_point(data = filter(med_rep_1_2, mad_over_med_0B == as.double(1)),
+             color = 'red') +
+  xlab("Median RNA/DNA 0A") +
+  ylab("Median RNA/DNA 0B") +
+  scale_x_log10() + scale_y_log10() +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border() +
+  annotate("text", x = 0.5, y = 5,
+           label = paste('r =', round(cor(log10(med_rep_1_2$med_ratio_0A),
+                                          log10(med_rep_1_2$med_ratio_0B),
+                                          na.rm = TRUE,
+                                          use = "pairwise.complete.obs", 
+                                          method = "pearson"), 2)))
+
+
+p_med_rep_25 <- ggplot(med_rep_1_2, aes(med_ratio_25A, med_ratio_25B)) +
+  geom_point(alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2, mad_over_med_25A == as.double(1)),
+             color = 'red') +
+  geom_point(data = filter(med_rep_1_2, mad_over_med_25B == as.double(1)),
+             color = 'red') +
+  xlab("Median RNA/DNA 25A") +
+  ylab("Median RNA/DNA 25B") +
+  scale_x_log10() + scale_y_log10() +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border() +
+  annotate("text", x = 0.5, y = 5,
+           label = paste('r =', round(cor(log10(med_rep_1_2$med_ratio_25A),
+                                          log10(med_rep_1_2$med_ratio_25B),
+                                          na.rm = TRUE,
+                                          use = "pairwise.complete.obs", 
+                                          method = "pearson"), 2)))
+
+
+
 
 #Normalize to background
 
