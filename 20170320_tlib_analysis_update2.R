@@ -1679,7 +1679,7 @@ pseudo_bc_join_DNA <- pseudo_bc_map_join_bc(barcode_map, bc_DNA)
 #RNA/DNA
 
 bc_dna_join_rna <- function(df1, df2) {
-  filter_reads <- filter(df1, num_reads > 5)
+  filter_reads <- filter(df1, num_reads > 2)
   DNA_RNA_join <- left_join(filter_reads, df2,
                             by = c("barcode", "name", "subpool", 
                                    "most_common"), 
@@ -1702,11 +1702,14 @@ RNA_DNA_bc_R25B <- bc_dna_join_rna(bc_join_DNA, bc_join_R25B)
 #each BC per variant then per variant determine the median absolute deviation.
 #Set a cut-off of less than 1 for mad/median (which removes no variants).
 
+%>%
+  filter(mad_over_med < as.double(1))
+
 ratio_bc_med_var <- function(df1) {
   bc_count_DNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     summarize(barcodes_DNA = n()) %>%
-    filter(barcodes_DNA > 4)
+    filter(barcodes_DNA > 7)
   bc_count_RNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     filter(num_reads_RNA != 0) %>%
@@ -1727,8 +1730,7 @@ ratio_bc_med_var <- function(df1) {
     mutate(mad_over_med = if_else(
       is.na(mad_over_med),
       as.double(0), 
-      mad_over_med)) %>%
-    filter(mad_over_med < as.double(1))
+      mad_over_med))
   bc_med <- inner_join(med_mad, bc_DNA_RNA, 
                        by = c('subpool', 'name', 'most_common')) %>%
     ungroup()
@@ -1739,46 +1741,6 @@ med_RNA_DNA_R0A <- ratio_bc_med_var(RNA_DNA_bc_R0A)
 med_RNA_DNA_R0B <- ratio_bc_med_var(RNA_DNA_bc_R0B)
 med_RNA_DNA_R25A <- ratio_bc_med_var(RNA_DNA_bc_R25A)
 med_RNA_DNA_R25B <- ratio_bc_med_var(RNA_DNA_bc_R25B)
-
-#What about all those noisy sequences removed?
-
-ratio_bc_med_var_rm <- function(df1) {
-  bc_count_DNA <- df1 %>%
-    group_by(subpool, name, most_common) %>%
-    summarize(barcodes_DNA = n()) %>%
-    filter(barcodes_DNA > 4)
-  bc_count_RNA <- df1 %>%
-    group_by(subpool, name, most_common) %>%
-    filter(num_reads_RNA != 0) %>%
-    summarize(barcodes_RNA = n())
-  bc_DNA_RNA <- inner_join(bc_count_DNA, bc_count_RNA, 
-                           by = c('subpool', 'name', 'most_common'))
-  med_ratio <- df1 %>%
-    group_by(subpool, name, most_common) %>%
-    summarize(med_ratio = median(ratio))
-  mad_ratio <- inner_join(df1, med_ratio, 
-                          by = c('subpool', 'name', 'most_common')) %>%
-    mutate(absdev = abs(ratio - med_ratio)) %>%
-    group_by(subpool, name, most_common) %>%
-    summarize(mad = median(absdev))
-  med_mad <- inner_join(med_ratio, mad_ratio, 
-                        by = c('subpool', 'name', 'most_common')) %>%
-    mutate(mad_over_med = as.double(mad/med_ratio)) %>%
-    mutate(mad_over_med = if_else(
-      is.na(mad_over_med),
-      as.double(0), 
-      mad_over_med)) %>%
-    filter(mad_over_med >= as.double(1))
-  bc_med <- inner_join(med_mad, bc_DNA_RNA, 
-                       by = c('subpool', 'name', 'most_common')) %>%
-    ungroup()
-  return(bc_med)
-}
-
-med_RNA_DNA_R0A_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R0A)
-med_RNA_DNA_R0B_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R0B)
-med_RNA_DNA_R25A_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R25A)
-med_RNA_DNA_R25B_rm <- ratio_bc_med_var_rm(RNA_DNA_bc_R25B)
 
 
 #Combine all samples
@@ -1801,8 +1763,26 @@ med_var_rep <- function(df0A, df0B, df25A, df25B) {
 med_rep_1_2 <- med_var_rep(med_RNA_DNA_R0A, med_RNA_DNA_R0B, 
                            med_RNA_DNA_R25A, med_RNA_DNA_R25B)
 
-test_back <- filter(med_rep_1_2, startsWith(name, 
-                               'subpool5_no_site_no_site_no_site_no_site_no_site_no_site'))
+med_rep_1_2_0corr <- med_rep_1_2 %>%
+  mutate(med_ratio_0A = if_else(
+    med_ratio_0A  == as.double(0),
+    as.double(0.01), 
+    med_ratio_0A ))%>%
+  mutate(med_ratio_0B = if_else(
+    med_ratio_0B  == as.double(0),
+    as.double(0.01), 
+    med_ratio_0B ))%>%
+  mutate(med_ratio_25A = if_else(
+    med_ratio_25A  == as.double(0),
+    as.double(0.01), 
+    med_ratio_25A ))%>%
+  mutate(med_ratio_25B = if_else(
+    med_ratio_25B  == as.double(0),
+    as.double(0.01), 
+    med_ratio_25B ))
+
+
+#Following mad/med per med
 
 med_mad_gather <- function(df1) {
   med <- df1 %>%
@@ -1828,96 +1808,475 @@ med_mad_gather <- function(df1) {
 
 med_mad_rep_1_2 <- med_mad_gather(med_rep_1_2)
 
-
 p_mad_over_med_distr <- ggplot(med_mad_rep_1_2, aes(mad_over_med)) +
   geom_density(kernel = 'gaussian') +
-  facet_wrap(~ condition) + 
+  facet_grid(subpool ~ condition) + 
   panel_border() +
   xlab('MAD/Med')
 
-save_plot('plots/p_mad_over_med_distr.png', p_mad_over_med_distr,
+save_plot('plots/p_mad_over_med_distr_BCcutoff.png', p_mad_over_med_distr,
           base_width = 7, base_height = 5)
 
-p_med_vs_madmed <- ggplot(med_mad_rep_1_2, aes(med, mad_over_med)) +
-  geom_point(alpha = 0.3) +
-  geom_point(data = filter(med_mad_rep_1_2, startsWith(name, 
-                               'subpool5_no_site_no_site_no_site_no_site_no_site_no_site')),
-             color = 'red') +
-  facet_wrap(~ condition) + 
-  panel_border() +
-  xlab('Median') + ylab('MAD/Median')
+sum_rep_1_2 <- rep_1_2 %>%
+  select(subpool, name, ratio_0A, ratio_0B, ratio_25A, ratio_25B) %>%
+  gather(ratio_0A, ratio_0B, ratio_25A, ratio_25B,
+         key = condition, value = sum) %>%
+  separate(condition, into = c("fluff1", "condition"),
+           sep = "_", convert = TRUE) %>% 
+  select(-fluff1)
 
-save_plot('plots/p_med_vs_madmed.png', p_med_vs_madmed,
-          base_width = 7, base_height = 5)
+sum_med_var_cond <- inner_join(sum_rep_1_2, med_mad_rep_1_2,
+                          by = c('subpool', 'name', 'condition')) %>%
+  mutate(med = if_else(
+    med == as.double(0),
+    as.double(0.01), 
+    med))
 
 
 #Compare med replicates and mad to sum, focusing on mad/median = 1 contribution 
 #to replicability
 
-sum_rep_1_2 <- rep_1_2 %>%
-    select(subpool, name, ratio_0A, ratio_0B, ratio_25A, ratio_25B) %>%
-    gather(ratio_0A, ratio_0B, ratio_25A, ratio_25B,
-           key = condition, value = sum) %>%
-    separate(condition, into = c("fluff1", "condition"),
-             sep = "_", convert = TRUE) %>% 
-    select(-fluff1)
+sum_med_var <- inner_join(rep_1_2, med_rep_1_2_0corr,
+                          by = c('subpool', 'name', 'most_common'),
+                          suffix = c('sum', 'med')) %>%
+  mutate(ave_sum_0 = (ratio_0A + ratio_0B)/2) %>%
+  mutate(ave_sum_25 = (ratio_25A + ratio_25B)/2) %>%
+  mutate(ave_med_0 = (med_ratio_0A + med_ratio_0B)/2) %>%
+  mutate(ave_med_25 = (med_ratio_25A + med_ratio_25B)/2)
 
-sum_med_var <- inner_join(sum_rep_1_2, med_mad_rep_1_2,
-                               by = c('subpool', 'name', 'condition')) %>%
-  filter(med != as.double(0))
-
-p_med_vs_sum_rep <- ggplot(sum_med_var, aes(med, sum)) +
-  facet_wrap(~ condition) +
-  geom_point(alpha = 0.3) +
-  geom_point(data = filter(sum_med_var, mad_over_med == as.double(1)),
-             color = 'red') +
-  xlab("Median RNA/DNA") +
-  ylab("Sum RNA/DNA") +
-  scale_x_log10() + scale_y_log10() +
+p_med_vs_sum_0_rep <- ggplot(data = NULL, aes(ave_sum_0, ave_med_0)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_0A == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_0B == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  xlab("Ave Sum RNA/DNA 25A") +
+  ylab("Ave Med RNA/DNA 25B") +
+  scale_x_log10(limits = c(0.01, 44)) + 
+  scale_y_log10(limits = c(0.01, 32)) +
   annotation_logticks(sides = 'bl') +
   background_grid(major = 'xy', minor = 'none') + 
-  panel_border() 
+  panel_border() +
+  annotate("text", x = 0.05, y = 10, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool5')$ave_med_0,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool5')$ave_sum_0,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0.05, y = 5, color = '#33638DFF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool3')$ave_med_0,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool3')$ave_sum_0,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool4')$ave_med_0,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool4')$ave_sum_0,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool2')$ave_med_0,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool2')$ave_sum_0,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
 
-p_med_rep_0 <- ggplot(med_rep_1_2, aes(med_ratio_0A, med_ratio_0B)) +
-  geom_point(alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2, mad_over_med_0A == as.double(1)),
-             color = 'red') +
-  geom_point(data = filter(med_rep_1_2, mad_over_med_0B == as.double(1)),
-             color = 'red') +
+p_med_vs_sum_25_rep <- ggplot(data = NULL, aes(ave_sum_25, ave_med_25)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_25A == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_25B == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  xlab("Ave Sum RNA/DNA 25A") +
+  ylab("Ave Med RNA/DNA 25B") +
+  scale_x_log10(limits = c(0.01, 44)) + 
+  scale_y_log10(limits = c(0.01, 32)) +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border() +
+  annotate("text", x = 0.05, y = 10, color = '#440154FF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool5')$ave_med_25,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool5')$ave_sum_25,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0.05, y = 5, color = '#33638DFF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool3')$ave_med_25,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool3')$ave_sum_25,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool4')$ave_med_25,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool4')$ave_sum_25,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2))) +
+  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF', 
+           label = paste('r =', 
+                         round(cor(filter(sum_med_var, 
+                                          subpool == 'subpool2')$ave_med_25,
+                                   filter(sum_med_var, 
+                                          subpool == 'subpool2')$ave_sum_25,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"),
+                               2)))
+
+p_med_vs_sum_0_25_rep <- plot_grid(p_med_vs_sum_0_rep, p_med_vs_sum_25_rep, 
+                                   nrow = 2, scale = 0.9, 
+                                   labels = c(' 0 µM', '25 µM'),
+                                   align = 'v', hjust = -3, vjust = -1)
+
+save_plot('plots/p_med_vs_sum_0_25_rep_read3.png', p_med_vs_sum_0_25_rep,
+          base_width = 10.5, base_height = 7)
+
+
+p_med_rep_0 <- ggplot(data = NULL, aes(med_ratio_0A, med_ratio_0B)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, 
+                           mad_over_med_0A == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  geom_point(data = filter(med_rep_1_2_0corr, 
+                           mad_over_med_0B == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
   xlab("Median RNA/DNA 0A") +
   ylab("Median RNA/DNA 0B") +
-  scale_x_log10() + scale_y_log10() +
+  scale_x_log10(limits = c(0.01, 32)) + 
+  scale_y_log10(limits = c(0.01, 32)) +
   annotation_logticks(sides = 'bl') +
   background_grid(major = 'xy', minor = 'none') + 
   panel_border() +
-  annotate("text", x = 0.5, y = 5,
-           label = paste('r =', round(cor(log10(med_rep_1_2$med_ratio_0A),
-                                          log10(med_rep_1_2$med_ratio_0B),
-                                          na.rm = TRUE,
-                                          use = "pairwise.complete.obs", 
-                                          method = "pearson"), 2)))
+  annotate("text", x = 0.05, y = 10.1, color = '#440154FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool5')$med_ratio_0A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool5')$med_ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 5, color = '#33638DFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool3')$med_ratio_0A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool3')$med_ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool4')$med_ratio_0A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool4')$med_ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool2')$med_ratio_0A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool2')$med_ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2)))
 
-
-p_med_rep_25 <- ggplot(med_rep_1_2, aes(med_ratio_25A, med_ratio_25B)) +
-  geom_point(alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2, mad_over_med_25A == as.double(1)),
-             color = 'red') +
-  geom_point(data = filter(med_rep_1_2, mad_over_med_25B == as.double(1)),
-             color = 'red') +
+p_med_rep_25 <- ggplot(filter(med_rep_1_2_0corr, subpool != 'control'), 
+                      aes(med_ratio_25A, med_ratio_25B)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_point(data = filter(med_rep_1_2_0corr, 
+                           mad_over_med_25A == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  geom_point(data = filter(med_rep_1_2_0corr, 
+                           mad_over_med_25B == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
   xlab("Median RNA/DNA 25A") +
   ylab("Median RNA/DNA 25B") +
-  scale_x_log10() + scale_y_log10() +
+  scale_x_log10(limits = c(0.01, 32)) + 
+  scale_y_log10(limits = c(0.01, 32)) +
   annotation_logticks(sides = 'bl') +
   background_grid(major = 'xy', minor = 'none') + 
   panel_border() +
-  annotate("text", x = 0.5, y = 5,
-           label = paste('r =', round(cor(log10(med_rep_1_2$med_ratio_25A),
-                                          log10(med_rep_1_2$med_ratio_25B),
-                                          na.rm = TRUE,
-                                          use = "pairwise.complete.obs", 
-                                          method = "pearson"), 2)))
+  annotate("text", x = 0.05, y = 10.1, color = '#440154FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool5')$med_ratio_25A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool5')$med_ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 5, color = '#33638DFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool3')$med_ratio_25A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool3')$med_ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool4')$med_ratio_25A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool4')$med_ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool2')$med_ratio_25A),
+                             log10(
+                               filter(med_rep_1_2_0corr, 
+                                      subpool == 'subpool2')$med_ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2)))
+
+p_rep_med_0_25 <- plot_grid(p_med_rep_0, p_med_rep_25, nrow = 2, 
+                                  scale = 0.9, labels = c(' 0 µM', '25 µM'),
+                                  align = 'v', hjust = -3, vjust = -1)
+
+save_plot('plots/p_rep_med_0_25_read3.png', p_rep_med_0_25,
+          base_width = 10.5, base_height = 7)
 
 
+p_sum_rep_0 <- ggplot(data = NULL, aes(ratio_0A, ratio_0B)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_0A == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_0B == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  xlab("Sum RNA/DNA 0A") +
+  ylab("Sum RNA/DNA 0B") +
+  scale_x_log10(limits = c(0.01, 44)) + 
+  scale_y_log10(limits = c(0.01, 44)) +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border() +
+  annotate("text", x = 0.05, y = 10.1, color = '#440154FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool5')$ratio_0A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool5')$ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 5, color = '#33638DFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool3')$ratio_0A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool3')$ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool4')$ratio_0A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool4')$ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool2')$ratio_0A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool2')$ratio_0B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2)))
+
+p_sum_rep_25 <- ggplot(filter(sum_med_var, subpool != 'control'), 
+                       aes(ratio_25A, ratio_25B)) +
+  facet_grid(. ~ subpool) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool5'),
+             color = '#440154FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool3'),
+             color = '#33638DFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool4'),
+             color = '#29AF7FFF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, subpool == 'subpool2'),
+             color = '#DCE319FF', alpha = 0.3) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_25A == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  geom_point(data = filter(sum_med_var, 
+                           mad_over_med_25B == as.double(1) & subpool != 'control'),
+             color = 'red', alpha = 0.7) +
+  xlab("Sum RNA/DNA 25A") +
+  ylab("Sum RNA/DNA 25B") +
+  scale_x_log10(limits = c(0.01, 44)) + 
+  scale_y_log10(limits = c(0.01, 44)) +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border() +
+  annotate("text", x = 0.05, y = 10.1, color = '#440154FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool5')$ratio_25A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool5')$ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 5, color = '#33638DFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool3')$ratio_25A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool3')$ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool4')$ratio_25A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool4')$ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2))) +
+  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF',
+           label = paste('r =', 
+                         round(
+                           cor(
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool2')$ratio_25A),
+                             log10(
+                               filter(sum_med_var, 
+                                      subpool == 'subpool2')$ratio_25B),
+                             use = "pairwise.complete.obs", method = "pearson"), 
+                           2)))
+
+p_rep_sum_0_25 <- plot_grid(p_sum_rep_0, p_sum_rep_25, nrow = 2, 
+                            scale = 0.9, labels = c(' 0 µM', '25 µM'),
+                            align = 'v', hjust = -3, vjust = -1)
+
+save_plot('plots/p_rep_sum_0_25_mad3.png', p_rep_sum_0_25,
+          base_width = 10.5, base_height = 7)
 
 
 #Normalize to background
