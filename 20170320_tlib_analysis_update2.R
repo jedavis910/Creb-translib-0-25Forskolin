@@ -84,8 +84,7 @@ var_sum_bc_num <- function(df1) {
     rename(sum = n)
   bc_sum <- inner_join(variant_sum, bc_count, 
                        by = c("name", "subpool", "most_common")) %>%
-    ungroup() %>%
-    filter(barcodes > 7)
+    ungroup()
   return(bc_sum)
 }
 
@@ -93,7 +92,8 @@ variant_counts_R25A <- var_sum_bc_num(bc_join_R25A)
 variant_counts_R25B <- var_sum_bc_num(bc_join_R25B)
 variant_counts_R0A <- var_sum_bc_num(bc_join_R0A)
 variant_counts_R0B <- var_sum_bc_num(bc_join_R0B)
-variant_counts_DNA <- var_sum_bc_num(bc_join_DNA)
+variant_counts_DNA <- var_sum_bc_num(bc_join_DNA) %>%
+  filter(barcodes > 7)
 
 
 #Normalizing RNA reads to DNA---------------------------------------------------
