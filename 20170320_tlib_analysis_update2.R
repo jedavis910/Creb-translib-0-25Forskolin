@@ -194,7 +194,7 @@ log2_rep_1_2_back_norm <- var_log2(rep_1_2_back_norm) %>%
 log10_rep_1_2_back_norm <- var_log10(rep_1_2_back_norm) %>%
   mutate(ave_barcodes_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
   mutate(ave_barcodes_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2)
-  
+
 
 #Subpool separation-------------------------------------------------------------
 
@@ -1591,6 +1591,7 @@ p_tsite_indsite <- plot_grid(p_totsite_ind_back_r,
 save_plot('plots/p_tsite_indsite.png', p_tsite_indsite, 
           base_width = 5, base_height = 7, scale = 1.2)
 
+
 #Including weak sites, all independent, independent background 
 
 subpool5_log2 <- var_log2(subpool5)
@@ -1649,103 +1650,8 @@ p_ind_sit_ind_back_nwc_grid <- plot_grid(p_ind_site_ind_back_nwc,
 save_plot('plots/p_ind_sit_ind_back_nwc_grid.png', p_ind_sit_ind_back_nwc_grid,
           base_width = 5, base_height = 8)
 
-#All independent sites, dependent background, not sure how useful this one is,
-#again, too many parameters to fit to
-
-ind_site_dep_back <- function(df) {
-  model <- lm(ave_ratio_25_norm ~ 
-                (site1 + site2 + site3 + site4 + site5 + site6) * background, 
-              data = df)
-}
-
-ind_site_dep_back_fit <- ind_site_dep_back(bin_site_s5)
-summary(ind_site_dep_back_fit)
-anova(ind_site_dep_back_fit)
-ind_site_dep_back_p_r <- pred_resid(bin_site_s5, ind_site_dep_back_fit)
-
-ggplot(ind_site_dep_back_p_r, aes(x = as.factor(total_sites))) +
-  facet_grid(. ~ background) +
-  geom_boxplot(aes(y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = pred), color = 'red')
-
-ggplot(ind_site_dep_back_p_r, aes(ave_ratio_25_norm, pred,
-                                  fill = total_sites)) +
-  geom_point(shape = 21, alpha = 0.7) +
-  scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 observed expression') + ylab('log2 predicted expression') +
-  annotate("text", x = 1.6, y = 4, 
-           label = paste('r =', 
-                         round(cor(ind_site_dep_back_p_r$pred,
-                                   ind_site_dep_back_p_r$ave_ratio_25_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"), 2)))
-
-#All dependent sites, independent background, this essentially just over-fits 
-#the data, looks good though
-
-dep_site_ind_back <- function(df) {
-  model <- lm(ave_ratio_25_norm ~ 
-                site1 * site2 * site3 * site4 * site5 * site6 + background, 
-              data = df)
-}
-
-mm <- model_matrix(bin_site_s5, ave_ratio_25_norm ~ 
-                     site1 * site2 * site3 * site4 * site5 * site6 + background)
-
-dep_site_ind_back_fit <- dep_site_ind_back(bin_site_s5)
-test <- summary(dep_site_ind_back_fit)
-anova(dep_site_ind_back_fit)
-dep_site_ind_back_p_r <- pred_resid(bin_site_s5, dep_site_ind_back_fit)
-
-ggplot(dep_site_ind_back_p_r, aes(x = as.factor(total_sites))) +
-  facet_grid(. ~ background) +
-  geom_boxplot(aes(y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = pred), color = 'red')
-
-ggplot(dep_site_ind_back_p_r, aes(ave_ratio_25_norm, pred,
-                                  fill = total_sites)) +
-  geom_point(shape = 21, alpha = 0.7) +
-  scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 observed expression') + ylab('log2 predicted expression') +
-  annotate("text", x = 1.6, y = 4, 
-           label = paste('r =', 
-                         round(cor(dep_site_ind_back_p_r$pred,
-                                   dep_site_ind_back_p_r$ave_ratio_25_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"), 2)))
 
 #Non-linear models
-
-hill_like_model <- function(df) {
-  n_init <- 1
-  site_half_max_init <- 1
-  max_ave_ratio_25_norm_init <- 60
-  hill_nls <- nls(
-    ave_ratio_25_norm ~ I(max_ave_ratio_25_norm * (total_sites)^n) / I(site_half_max + (total_sites)^n), 
-    data = df, start = c(site_half_max = site_half_max_init, n = n_init,
-                         max_ave_ratio_25_norm = max_ave_ratio_25_norm_init))
-  return(hill_nls)
-}
-
-hill_total_site_ind_back_fit <- hill_like_model(bin_site_s5)
-summary(hill_total_site_ind_back_fit)
-hill_total_site_ind_back_p_r <- pred_resid(bin_site_s5, 
-                                           hill_total_site_ind_back_fit)
-
-ggplot(hill_total_site_ind_back_p_r, aes(ave_ratio_25_norm, pred, 
-                                         fill = total_sites)) +
-  geom_point(shape = 21, alpha = 0.7) +
-  scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 observed expression') + ylab('log2 predicted expression') +
-  annotate("text", x = 1.6, y = 4, 
-           label = paste('r =', 
-                         round(cor(hill_total_site_ind_back_p_r$pred,
-                                   hill_total_site_ind_back_p_r$ave_ratio_25_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"), 2)))
 
 log_curve_model <- function(df) {
   n_init <- 1
@@ -1782,6 +1688,51 @@ p_log_curve <- ggplot(log_curve_p_r, aes(ave_ratio_25_norm, pred, fill = total_s
 
 save_plot('plots/p_log_curve.png', p_log_curve, 
           base_width = 4, base_height = 3, scale = 1.2)
+
+
+#Fit glm log curve to independent sites and background (need data normalized to
+#final expression of 1)
+
+#In order to do this need to have data normalized between 0 and 1, so will
+#determine max average expression observed in sp5, and normalize all other 
+#variants to this value
+
+subpool5_norm_max <- function(df) {
+  max <- df %>%
+    summarise(max_ave_ratio_25_norm = max(ave_ratio_25_norm))
+  df_norm_max <- df %>%
+    cbind(max) %>%
+    mutate(ave_ratio_25_norm = ave_ratio_25_norm/max_ave_ratio_25_norm) %>%
+    mutate(site1 = factor(site1, levels = c('nosite', 'weak', 'consensus')))%>%
+    mutate(site2 = factor(site2, levels = c('nosite', 'weak', 'consensus')))%>%
+    mutate(site3 = factor(site3, levels = c('nosite', 'weak', 'consensus')))%>%
+    mutate(site4 = factor(site4, levels = c('nosite', 'weak', 'consensus')))%>%
+    mutate(site5 = factor(site5, levels = c('nosite', 'weak', 'consensus')))%>%
+    mutate(site6 = factor(site6, levels = c('nosite', 'weak', 'consensus')))
+  return(df_norm_max)
+}
+
+subpool5_binomial <- subpool5_norm_max(subpool5)
+
+#Need to fix this, Warning message: In eval(expr, envir, enclos) : non-integer 
+# #successes in a binomial glm!
+
+ind_site_ind_back_log <- function(df) {
+  model <- glm(ave_ratio_25_norm ~ 
+                 site1 + site2 + site3 + site4 + site5 + site6 + background, 
+               data = df, family = binomial(link = 'logit'))
+}
+
+ind_site_ind_back_log_fit <- ind_site_ind_back_log(subpool5_binomial)
+
+summary_log_nwc <- tidy(ind_site_ind_back_log_fit) %>%
+  filter(str_detect(term, '^site')) %>%
+  mutate(term = gsub('nosite', '_nosite', term)) %>%
+  mutate(term = gsub('weak', '_weak', term)) %>%
+  separate(term, into = c('site', 'type'), sep = "_")
+
+tidy(anova(ind_site_ind_back_log_fit))
+ind_site_ind_back_log_p_r <- pred_resid(bin_site_s5, ind_site_ind_back_log_fit)
 
 
 #Median analysis of expression--------------------------------------------------
