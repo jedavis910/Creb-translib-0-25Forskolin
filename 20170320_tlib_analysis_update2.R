@@ -335,11 +335,54 @@ controls <-
 
 #Overall library analysis plots-------------------------------------------------
 
-#replicate plots using ratio
+#Background-normalized, entire library
+
+p_rep_bn_ratio_0_all <- ggplot(rep_1_2_back_norm, 
+                               aes(ratio_0A_norm, ratio_0B_norm)) +
+  geom_point(alpha = 0.2) + 
+  annotation_logticks(sides = 'bl') +
+  xlab("Expression (a.u.) replicate 1") +
+  ylab("Expression (a.u.) replicate 2") +
+  scale_x_log10(limits = c(0.3, 100)) + 
+  scale_y_log10(limits = c(0.3, 100)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 1, y = 10, 
+           label = paste('r =', round(cor(log10_rep_1_2_back_norm$ratio_0A_norm,
+                                          log10_rep_1_2_back_norm$ratio_0B_norm,
+                                          use = "pairwise.complete.obs", 
+                                          method = "pearson"), 2)))
+
+p_rep_bn_ratio_25_all <- ggplot(rep_1_2_back_norm, 
+                                aes(ratio_25A_norm, ratio_25B_norm)) +
+  geom_point(alpha = 0.2) + 
+  annotation_logticks(sides = 'bl') +
+  xlab("Expression (a.u.) replicate 1") +
+  ylab("Expression (a.u.) replicate 2") +
+  scale_x_log10(limits = c(0.3, 100)) + 
+  scale_y_log10(limits = c(0.3, 100)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 1, y = 10, 
+           label = paste('r =', 
+                         round(cor(log10_rep_1_2_back_norm$ratio_25A_norm,
+                                   log10_rep_1_2_back_norm$ratio_25B_norm,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
+
+p_rep_bn_ratio_0_25_all <- plot_grid(p_rep_bn_ratio_0_all, 
+                                     p_rep_bn_ratio_25_all, 
+                                     ncol = 2, 
+                                     labels = c(' 0 µM Forskolin', 
+                                                '25 µM Forskolin'), 
+                                     align = 'h', hjust = -0.7, vjust = -1,
+                                     scale = 0.9)
+
+save_plot('plots/p_rep_bn_ratio_0_25_all.png', p_rep_bn_ratio_0_25_all,
+          base_width = 5.5, base_height = 2.75, scale = 1.5)
+
+
+#No background all subpools
 
 log10_rep_1_2 <- var_log10(rep_1_2)
-
-#No background
 
 p_rep_ratio_0 <- ggplot(data = NULL, aes(ratio_0A, ratio_0B)) +
   facet_grid(. ~ subpool) +
@@ -470,7 +513,7 @@ p_rep_ratio_0_25 <- plot_grid(p_rep_ratio_0, p_rep_ratio_25,
 save_plot('plots/p_rep_ratio_0_25.png', p_rep_ratio_0_25,
           base_width = 10.5, base_height = 7)
 
-#Background-normalized
+#Background-normalized all subpools
 
 p_rep_backnorm_ratio_0 <- ggplot(data = NULL, 
                                  aes(ratio_0A_norm, ratio_0B_norm)) +
@@ -599,62 +642,6 @@ p_rep_backnorm_ratio_0_25 <- plot_grid(p_rep_backnorm_ratio_0,
 save_plot('plots/p_rep_backnorm_ratio_0_25.png', p_rep_backnorm_ratio_0_25,
           base_width = 10.5, base_height = 7)
 
-#Replicate plots for sp5 for CMB presentation
-
-p_rep_backnorm_ratio_0_sp5 <- ggplot(data = filter(log10_rep_1_2_back_norm, 
-                                                 subpool == 'subpool5'),
-                                   aes(ratio_0A_norm, ratio_0B_norm)) +
-  geom_point(color = '#440154FF', alpha = 0.3) +
-  geom_density2d(data = log10_rep_1_2_back_norm, 
-                 color = 'black', size = 0.2, bins = 10) +
-  geom_hline(yintercept = 0, alpha = 0.5) +
-  geom_vline(xintercept = 0, alpha = 0.5) +
-  annotation_logticks(scaled = TRUE) +
-  xlab("log10 background-norm.\nsum RNA/DNA BR 1") +
-  ylab("log10 background-norm.\nsum RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
-  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
-  background_grid(major = 'xy', minor = 'none') + 
-  annotate("text", x = 0.5, y = 1.5, color = '#440154FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_0A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_0B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) 
-
-p_rep_backnorm_ratio_25_sp5 <- ggplot(data = filter(log10_rep_1_2_back_norm, 
-                                                   subpool == 'subpool5'),
-                                     aes(ratio_25A_norm, ratio_25B_norm)) +
-  geom_point(color = '#440154FF', alpha = 0.3) +
-  geom_density2d(data = log10_rep_1_2_back_norm, 
-                 color = 'black', size = 0.2, bins = 10) +
-  geom_hline(yintercept = 0, alpha = 0.5) +
-  geom_vline(xintercept = 0, alpha = 0.5) +
-  annotation_logticks(scaled = TRUE) +
-  xlab("log10 background-norm.\nsum RNA/DNA BR 1") +
-  ylab("log10 background-norm.\nsum RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
-  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
-  background_grid(major = 'xy', minor = 'none') + 
-  annotate("text", x = 0.5, y = 1.5, color = '#440154FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_25A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_25B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2)))
-
-p_rep_backnorm_ratio_0_25_sp5 <- plot_grid(p_rep_backnorm_ratio_0_sp5, 
-                                       p_rep_backnorm_ratio_25_sp5, 
-                                       nrow = 2, scale = 0.9)
-
-save_plot('plots/p_rep_backnorm_ratio_0_25_sp5.png', 
-          p_rep_backnorm_ratio_0_25_sp5, base_width = 3.5, base_height = 7)
 
 #Showing what library looks like before and after normalizing to background
 
@@ -893,6 +880,7 @@ p_luc_comp_both_induction <- ggplot(luc_comp_both,
        y = 'Transient Variant Induction Ratio')
 
 #Positive control
+
 p_control_3_5_0_25 <- ggplot(NULL, 
                                   aes(ave_ratio_0, ave_ratio_25)) +
   geom_point(data = sep_5, color = '#999999', 
@@ -1032,6 +1020,89 @@ save_plot('plots/subpool3_chr9_10_0_25.png',
 
 
 #Subpool 5
+
+#Plot number of sites vs. expression across backgrounds with plots separated by
+#just consensus, just weak and then combinations
+
+#Make untidy data with concentration as variable
+
+sp5_conc_exp <- function(df) {
+  df_0 <- df %>%
+    mutate(ave_barcode_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
+    select(site1, site2, site3, site4, site5, site6, most_common, background, 
+           consensus, weak, nosite, total_sites, site_combo, ave_barcode_0, 
+           ave_ratio_0_norm, induction) %>%
+    mutate(conc = 0) %>%
+    rename(ave_ratio_norm = ave_ratio_0_norm) %>%
+    rename(ave_barcode = ave_barcode_0)
+  df_25 <- df %>%
+    mutate(ave_barcode_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2) %>%
+    select(site1, site2, site3, site4, site5, site6, most_common, background, 
+           consensus, weak, nosite, total_sites, site_combo, ave_barcode_25, 
+           ave_ratio_25_norm, induction) %>%
+    mutate(conc = 25) %>%
+    rename(ave_ratio_norm = ave_ratio_25_norm) %>%
+    rename(ave_barcode = ave_barcode_25)
+  df_0_25 <- rbind(df_0, df_25)
+  return(df_0_25)
+}
+
+sp5_untidy_conc <- sp5_conc_exp(subpool5)
+
+#Plot # just consensus across all backgrounds for induced
+
+#in order to facet by site_type, need to duplicate the 6 nosite baseline in each
+#category
+
+s5_dup_6no <- function(df) {
+  no_cons <- df %>%
+    filter(total_sites == 0) %>%
+    mutate(site_type = 'consensus')
+  no_weak <- df %>%
+    filter(total_sites == 0) %>%
+    mutate(site_type = 'weak')
+  no_join_rm_mixed <- rbind(no_cons, no_weak, df) %>%
+    filter(site_type != 'mixed')
+  return(no_join_rm_mixed)
+}
+
+s5_no_mix <- s5_dup_6no(subpool5)
+
+p_num_cons_weak <- ggplot(s5_no_mix, 
+                          aes(x = as.factor(total_sites), y = induction)) +
+  geom_boxplot(position = position_dodge(1)) +
+  scale_y_log10(limits = c(0.8, 20)) +
+  facet_grid(background ~ site_type) +
+  panel_border() +
+  annotation_logticks(sides = 'l') +
+  background_grid(major = 'y', minor = 'none') +
+  ylab('Average induction (a.u.)') +
+  xlab('Number of total sites')
+
+save_plot('plots/p_num_cons_weak.png', p_num_cons_weak,
+          base_width = 3.25, base_height = 4.5, scale = 1.5)
+
+
+#Weak contribution to expression keeping # consensus constant and adding weak
+
+p_num_cons_num_weak <- ggplot(subpool5, 
+                              aes(x = as.factor(consensus), 
+                                  y = induction)) +
+  geom_boxplot(aes(color = as.factor(weak)), show.legend = TRUE,
+               position = position_dodge(1)) +
+  scale_y_log10(limits = c(0.8, 20)) +
+  facet_grid(background ~ .) + 
+  panel_border() +
+  annotation_logticks(sides = 'lr') +
+  scale_color_manual(name = 'number of\nweak sites', values = cbPalette7) +
+  background_grid(major = 'y', minor = 'none') + 
+  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
+  ylab('Average induction (a.u.)') +
+  xlab('Number of consensus sites')
+
+save_plot('plots/p_num_cons_num_weak.png', p_num_cons_num_weak, scale = 1.5,
+          base_width = 6, base_height = 4.5)
+
 
 #plot combinations of consensus and weak vs. their induced expression as a 
 #function of the total number of sites filled
@@ -1228,25 +1299,7 @@ save_plot('plots/p_s5_single_site_exp.png', p_s5_single_site_exp,
           scale = 1.2, base_width = 4.5, base_height = 3)
 
 
-#Do weak sites operate as no_sites or do they still contribute to expression?
 
-p_num_cons_num_weak <- ggplot(subpool5, 
-                              aes(x = as.factor(consensus), 
-                                  y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(color = as.factor(weak)), show.legend = TRUE,
-               position = position_dodge(1)) +
-  scale_y_log10() +
-  facet_grid(background ~ .) + 
-  panel_border() +
-  annotation_logticks(sides = 'lr') +
-  scale_color_manual(values = cbPalette7) +
-  background_grid(major = 'y', minor = 'none') + 
-  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('log10 expression at 25 µM') +
-  xlab('Number of consensus sites')
-
-save_plot('plots/p_num_cons_num_weak.png', p_num_cons_num_weak, scale = 1.3,
-          base_width = 6, base_height = 4)
 
 
 #Look at site architecture changes per background per n% population bins that 
@@ -1737,11 +1790,11 @@ ind_site_ind_back_log_p_r <- pred_resid(bin_site_s5, ind_site_ind_back_log_fit)
 
 #Median analysis of expression--------------------------------------------------
 
-#Filter DNA reads to set a minimum of 3 reads per BC join with RNA and determine
+#Filter DNA reads to set a minimum of 5 reads per BC join with RNA and determine
 #RNA/DNA
 
 bc_dna_join_rna <- function(df1, df2) {
-  filter_reads <- filter(df1, num_reads > 2)
+  filter_reads <- filter(df1, num_reads > 5)
   DNA_RNA_join <- left_join(filter_reads, df2,
                             by = c("barcode", "name", "subpool", 
                                    "most_common"), 
@@ -1756,7 +1809,7 @@ RNA_DNA_bc_R0B <- bc_dna_join_rna(bc_join_DNA, bc_join_R0B)
 RNA_DNA_bc_R25A <- bc_dna_join_rna(bc_join_DNA, bc_join_R25A)
 RNA_DNA_bc_R25B <- bc_dna_join_rna(bc_join_DNA, bc_join_R25B)
 
-#Count barcodes per variant per DNA and RNA, set minimum of 7 BC's per variant 
+#Count barcodes per variant per DNA and RNA, set minimum of 3 BC's per variant 
 #in DNA sample, take median RNA/DNA per variant, find absolute deviation for
 #each BC per variant then per variant determine the median absolute deviation.
 
@@ -1764,7 +1817,7 @@ ratio_bc_med_var <- function(df1) {
   bc_count_DNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     summarize(barcodes_DNA = n()) %>%
-    filter(barcodes_DNA > 7)
+    filter(barcodes_DNA > 2)
   bc_count_RNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     filter(num_reads_RNA != 0) %>%
@@ -1774,11 +1827,9 @@ ratio_bc_med_var <- function(df1) {
   med_ratio <- df1 %>%
     group_by(subpool, name, most_common) %>%
     summarize(med_ratio = median(ratio))
-  mad_ratio <- inner_join(df1, med_ratio, 
-                          by = c('subpool', 'name', 'most_common')) %>%
-    mutate(absdev = abs(ratio - med_ratio)) %>%
+  mad_ratio <- df1 %>%
     group_by(subpool, name, most_common) %>%
-    summarize(mad = median(absdev))
+    summarize(mad = mad(ratio))
   med_mad <- inner_join(med_ratio, mad_ratio, 
                         by = c('subpool', 'name', 'most_common')) %>%
     mutate(mad_over_med = as.double(mad/med_ratio)) %>%
@@ -1835,6 +1886,12 @@ med_rep_1_2_0corr <- med_rep_1_2 %>%
     med_ratio_25B  == as.double(0),
     as.double(0.01), 
     med_ratio_25B ))
+
+med_rep_1_2_0rm <- med_rep_1_2 %>%
+  filter(med_ratio_0A != as.double(0)) %>%
+  filter(med_ratio_0B != as.double(0)) %>%
+  filter(med_ratio_25A != as.double(0)) %>%
+  filter(med_ratio_25B != as.double(0))
  
 
 #Following mad/med per med
@@ -1865,28 +1922,61 @@ med_mad_rep_1_2 <- med_mad_gather(med_rep_1_2)
 
 p_mad_over_med_distr <- ggplot(med_mad_rep_1_2, aes(mad_over_med)) +
   geom_density(kernel = 'gaussian') +
-  facet_grid(subpool ~ condition) + 
+  facet_wrap(~ condition) + 
   panel_border() +
   xlab('MAD/Med')
 
 save_plot('plots/p_mad_over_med_distr_BCcutoff.png', p_mad_over_med_distr,
           base_width = 7, base_height = 5)
 
-sum_rep_1_2 <- rep_1_2 %>%
-  select(subpool, name, ratio_0A, ratio_0B, ratio_25A, ratio_25B) %>%
-  gather(ratio_0A, ratio_0B, ratio_25A, ratio_25B,
-         key = condition, value = sum) %>%
-  separate(condition, into = c("fluff1", "condition"),
-           sep = "_", convert = TRUE) %>% 
-  select(-fluff1)
 
-sum_med_var_cond <- inner_join(sum_rep_1_2, med_mad_rep_1_2,
-                          by = c('subpool', 'name', 'condition')) %>%
-  mutate(med = if_else(
-    med == as.double(0),
-    as.double(0.01), 
-    med))
+#Median replicability with MAD/med > 1 in red
 
+p_med_rep_0 <- ggplot(data = NULL, aes(med_ratio_0A, med_ratio_0B)) +
+  geom_point(data = filter(med_rep_1_2_0rm, mad_over_med_0A < 1 | mad_over_med_0A < 1), 
+             alpha = 0.2, color = 'black') +
+  geom_point(data = filter(med_rep_1_2_0rm, mad_over_med_0A > 1 | mad_over_med_0A > 1), 
+             alpha = 0.2, color = 'red') +
+  xlab("Median expression replicate 1") +
+  ylab("Median expression replicate 2") +
+  scale_x_log10(limits = c(0.03, 40)) + 
+  scale_y_log10(limits = c(0.03, 40)) +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 0.1, y = 10, 
+           label = paste('r =', round(cor(log10(med_rep_1_2_0rm$med_ratio_0A),
+                                          log10(med_rep_1_2_0rm$med_ratio_0B),
+                                          use = "pairwise.complete.obs", 
+                                          method = "pearson"), 2)))
+
+p_med_rep_25 <- ggplot(data = NULL, aes(med_ratio_25A, med_ratio_25B)) +
+  geom_point(data = filter(med_rep_1_2_0rm, mad_over_med_25A < 1 | mad_over_med_25A < 1), 
+             alpha = 0.2, color = 'black') +
+  geom_point(data = filter(med_rep_1_2_0rm, mad_over_med_25A > 1 | mad_over_med_25A > 1), 
+             alpha = 0.2, color = 'red') +
+  xlab("Median expression replicate 1") +
+  ylab("Median expression replicate 2") +
+  scale_x_log10(limits = c(0.03, 40)) + 
+  scale_y_log10(limits = c(0.03, 40)) +
+  annotation_logticks(sides = 'bl') +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 0.1, y = 10, 
+           label = paste('r =', round(cor(log10(med_rep_1_2_0rm$med_ratio_25A),
+                                          log10(med_rep_1_2_0rm$med_ratio_25B),
+                                          use = "pairwise.complete.obs", 
+                                          method = "pearson"), 2)))
+
+p_rep_med_0_25 <- plot_grid(p_med_rep_0, p_med_rep_25, ncol = 2, 
+                            labels = c(' 0 µM Forskolin', 
+                                       '25 µM Forskolin'), 
+                            align = 'h', hjust = -0.7, vjust = -1,
+                            scale = 0.9)
+
+save_plot('plots/p_rep_med_0_25.png', p_rep_med_0_25,
+          base_width = 5, base_height = 2.5, scale = 1.5)
+
+
+#Compare to sum
 
 #Compare med replicates and mad to sum, focusing on mad/median = 1 contribution 
 #to replicability
@@ -2029,157 +2119,41 @@ save_plot('plots/p_med_vs_sum_0_25_rep_read3_nomed0.png', p_med_vs_sum_0_25_rep,
           base_width = 10.5, base_height = 7)
 
 
-p_med_rep_0 <- ggplot(data = NULL, aes(med_ratio_0A, med_ratio_0B)) +
-  facet_grid(. ~ subpool) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool5'),
-             color = '#440154FF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool3'),
-             color = '#33638DFF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool4'),
-             color = '#29AF7FFF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool2'),
-             color = '#DCE319FF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, 
-                           mad_over_med_0A == as.double(1) & subpool != 'control'),
-             color = 'red', alpha = 0.7) +
-  geom_point(data = filter(med_rep_1_2_0corr, 
-                           mad_over_med_0B == as.double(1) & subpool != 'control'),
-             color = 'red', alpha = 0.7) +
-  xlab("Median RNA/DNA 0A") +
-  ylab("Median RNA/DNA 0B") +
-  scale_x_log10(limits = c(0.01, 32)) + 
-  scale_y_log10(limits = c(0.01, 32)) +
-  annotation_logticks(sides = 'bl') +
-  background_grid(major = 'xy', minor = 'none') + 
-  panel_border() +
-  annotate("text", x = 0.05, y = 10.1, color = '#440154FF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool5')$med_ratio_0A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool5')$med_ratio_0B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2))) +
-  annotate("text", x = 0.05, y = 5, color = '#33638DFF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool3')$med_ratio_0A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool3')$med_ratio_0B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2))) +
-  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool4')$med_ratio_0A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool4')$med_ratio_0B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2))) +
-  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool2')$med_ratio_0A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool2')$med_ratio_0B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2)))
+#Try using ggpairs for correlation to median
 
-p_med_rep_25 <- ggplot(filter(med_rep_1_2_0corr, subpool != 'control'), 
-                      aes(med_ratio_25A, med_ratio_25B)) +
-  facet_grid(. ~ subpool) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool5'),
-             color = '#440154FF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool3'),
-             color = '#33638DFF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool4'),
-             color = '#29AF7FFF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, subpool == 'subpool2'),
-             color = '#DCE319FF', alpha = 0.3) +
-  geom_point(data = filter(med_rep_1_2_0corr, 
-                           mad_over_med_25A == as.double(1) & subpool != 'control'),
-             color = 'red', alpha = 0.7) +
-  geom_point(data = filter(med_rep_1_2_0corr, 
-                           mad_over_med_25B == as.double(1) & subpool != 'control'),
-             color = 'red', alpha = 0.7) +
-  xlab("Median RNA/DNA 25A") +
-  ylab("Median RNA/DNA 25B") +
-  scale_x_log10(limits = c(0.01, 32)) + 
-  scale_y_log10(limits = c(0.01, 32)) +
-  annotation_logticks(sides = 'bl') +
-  background_grid(major = 'xy', minor = 'none') + 
-  panel_border() +
-  annotate("text", x = 0.05, y = 10.1, color = '#440154FF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool5')$med_ratio_25A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool5')$med_ratio_25B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2))) +
-  annotate("text", x = 0.05, y = 5, color = '#33638DFF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool3')$med_ratio_25A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool3')$med_ratio_25B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2))) +
-  annotate("text", x = 0.05, y = 2.5, color = '#29AF7FFF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool4')$med_ratio_25A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool4')$med_ratio_25B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2))) +
-  annotate("text", x = 0.05, y = 1.25, color = '#DCE319FF',
-           label = paste('r =', 
-                         round(
-                           cor(
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool2')$med_ratio_25A),
-                             log10(
-                               filter(med_rep_1_2_0corr, 
-                                      subpool == 'subpool2')$med_ratio_25B),
-                             use = "pairwise.complete.obs", method = "pearson"), 
-                           2)))
+library(GGally)
 
-p_rep_med_0_25 <- plot_grid(p_med_rep_0, p_med_rep_25, nrow = 2, 
-                                  scale = 0.9, labels = c(' 0 µM', '25 µM'),
-                                  align = 'v', hjust = -3, vjust = -1)
+#Make df for each condition of non-background-normalized reads of format: ([1] 
+#sum_1, [2] sum_2, [3] median_1, [4] median_2). If want to compare effect of 
+#mad/med > 1 will need to make df with and without these variants
 
-save_plot('plots/p_rep_med_0_25_read3.png', p_rep_med_0_25,
-          base_width = 10.5, base_height = 7)
+med_sum_join_0 <- function(sum, med) {
+  sum_select <- sum %>%
+    select(name, ratio_0A, ratio_0B)
+  med_select <- med %>%
+    select(name, med_ratio_0A, med_ratio_0B)
+  sum_med <- inner_join(sum_select, med_select, by = 'name') %>%
+    select(-name)
+  return(sum_med)
+}
+
+med_sum_join_25 <- function(sum, med) {
+  sum_select <- sum %>%
+    select(name, ratio_25A, ratio_25B)
+  med_select <- med %>%
+    select(name, med_ratio_25A, med_ratio_25B)
+  sum_med <- inner_join(sum_select, med_select, by = 'name') %>%
+    select(-name)
+  return(sum_med)
+}
+
+med_vs_sum_0 <- med_sum_join_0(rep_1_2, med_rep_1_2) %>%
+  var_log10()
+#get infinity with log10 manipulation, need to make sure I'm getting rid of 0's
+#in med first
+med_vs_sum_25 <- med_sum_join_25(rep_1_2, med_rep_1_2)
+
+ggpairs(med_vs_sum_0, lower = list(continuous = wrap('points', alpha = 0.2)))
 
 
 #Normalize to background
