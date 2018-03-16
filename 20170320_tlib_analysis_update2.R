@@ -1983,8 +1983,6 @@ save_plot('plots/p_rep_med_0_25.png', p_rep_med_0_25,
 
 #Compare to sum
 
-#Try using ggpairs for correlation to median
-
 #Make df for each condition of non-background-normalized reads of format: ([1] 
 #sum_1, [2] sum_2, [3] median_1, [4] median_2). 
 
@@ -2018,8 +2016,7 @@ my_points <- function(data, mapping, ...) {
     geom_point(alpha = 0.2) +
     scale_x_continuous(limits = c(-1.5, 2), breaks = c(-1:2)) + 
     scale_y_continuous(limits = c(-1.5, 2), breaks = c(-1:2)) +
-    annotation_logticks(sides = 'bl') +
-    background_grid(major = 'xy', minor = 'none')
+    annotation_logticks(sides = 'bl')
 }
 
 my_density <- function(data, mapping, ...) {
@@ -2035,7 +2032,8 @@ p_med_vs_sum_0 <- ggpairs(med_vs_sum_0,
                                            'Med Exp.\nRep. 1', 'Med Exp.\nRep. 2'),
                           lower = list(continuous = my_points),
                           diag = list(continuous = my_density)) +
-  panel_border()
+  panel_border() + 
+  theme(panel.grid.major = element_blank())
 
 save_plot('plots/p_med_vs_sum_0.png', p_med_vs_sum_0, scale = 1.5)
 
@@ -2044,7 +2042,8 @@ p_med_vs_sum_25 <- ggpairs(med_vs_sum_25,
                                             'Med Exp.\nRep. 1', 'Med Exp.\nRep. 2'),
                            lower = list(continuous = my_points),
                            diag = list(continuous = my_density)) +
-  panel_border()
+  panel_border() + 
+  theme(panel.grid.major = element_blank())
 
 save_plot('plots/p_med_vs_sum_25.png', p_med_vs_sum_25, scale = 1.5)
 
