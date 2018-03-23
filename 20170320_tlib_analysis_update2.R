@@ -83,7 +83,7 @@ var_sum_bc_num <- function(df1) {
     group_by(subpool, name, most_common) %>%
     count(name, wt = normalized) %>%
     rename(sum = n)
-  bc_sum <- inner_join(variant_sum, bc_count, 
+  bc_sum <- left_join(variant_sum, bc_count, 
                        by = c("name", "subpool", "most_common")) %>%
     ungroup()
   return(bc_sum)
@@ -94,7 +94,7 @@ variant_counts_R25B <- var_sum_bc_num(bc_join_R25B)
 variant_counts_R0A <- var_sum_bc_num(bc_join_R0A)
 variant_counts_R0B <- var_sum_bc_num(bc_join_R0B)
 variant_counts_DNA <- var_sum_bc_num(bc_join_DNA) %>%
-  filter(barcodes > 7)
+  filter(barcodes > 2)
 
 
 #Normalizing RNA reads to DNA---------------------------------------------------
@@ -107,7 +107,8 @@ var_expression <- function(df1, df2) {
   RNA_DNA <- inner_join(df1, df2, 
                         by = c("name", "subpool", "most_common"), 
                         suffix = c("_RNA", "_DNA")) %>%
-    mutate(ratio = sum_RNA / sum_DNA)
+    mutate(ratio = sum_RNA / sum_DNA) %>%
+    filter(ratio > 0)
   print('x defined as RNA, y defined as DNA in var_expression(x,y)')
   return(RNA_DNA)
 }
@@ -381,269 +382,6 @@ save_plot('plots/p_rep_bn_ratio_0_25_all.png', p_rep_bn_ratio_0_25_all,
           base_width = 5.5, base_height = 2.75, scale = 1.5)
 
 
-#No background all subpools
-
-log10_rep_1_2 <- var_log10(rep_1_2)
-
-p_rep_ratio_0 <- ggplot(data = NULL, aes(ratio_0A, ratio_0B)) +
-  facet_grid(. ~ subpool) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool5'),
-             color = '#440154FF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool3'),
-             color = '#33638DFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool4'),
-             color = '#29AF7FFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool2'),
-             color = '#DCE319FF', alpha = 0.3) +
-  geom_density2d(data = filter(log10_rep_1_2, subpool != 'control'), 
-                 color = 'black', size = 0.2, bins = 10) +
-  geom_point(data = filter(log10_rep_1_2, 
-                           grepl(
-                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
-                             name)), 
-             color = '#B8DE29FF', alpha = 0.7) +
-  annotation_logticks(scaled = TRUE) +
-  xlab("log10 sum\nRNA/DNA BR 1") +
-  ylab("log10 sum\nRNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(-1:2), limits = c(-1, 2)) + 
-  scale_y_continuous(breaks = c(-1:2), limits = c(-1, 2)) +
-  background_grid(major = 'xy', minor = 'none') + 
-  panel_border() +
-  annotate("text", x = 0, y = 1.8, color = '#440154FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool5')$ratio_0A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool5')$ratio_0B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.5, color = '#33638DFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool3')$ratio_0A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool3')$ratio_0B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.2, color = '#29AF7FFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool4')$ratio_0A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool4')$ratio_0B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 0.9, color = '#DCE319FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool2')$ratio_0A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool2')$ratio_0B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2)))
-
-p_rep_ratio_25 <- ggplot(data = NULL, aes(ratio_25A, ratio_25B)) +
-  facet_grid(. ~ subpool) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool5'),
-             color = '#440154FF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool3'),
-             color = '#33638DFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool4'),
-             color = '#29AF7FFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2, subpool == 'subpool2'),
-             color = '#DCE319FF', alpha = 0.3) +
-  geom_density2d(data = filter(log10_rep_1_2, subpool != 'control'), 
-                 color = 'black', size = 0.2, bins = 10) +
-  geom_point(data = filter(log10_rep_1_2, 
-                           grepl(
-                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
-                             name)), 
-             color = '#B8DE29FF', alpha = 0.7) +
-  annotation_logticks(scaled = TRUE) +
-  xlab("log10 sum\nRNA/DNA BR 1") +
-  ylab("log10 sum\nRNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(-1:2), limits = c(-1, 2)) + 
-  scale_y_continuous(breaks = c(-1:2), limits = c(-1, 2)) +
-  background_grid(major = 'xy', minor = 'none') + 
-  panel_border() +
-  annotate("text", x = 0, y = 1.8, color = '#440154FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool5')$ratio_25A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool5')$ratio_25B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.5, color = '#33638DFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool3')$ratio_25A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool3')$ratio_25B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.2, color = '#29AF7FFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool4')$ratio_25A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool4')$ratio_25B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 0.9, color = '#DCE319FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2, 
-                                          subpool == 'subpool2')$ratio_25A,
-                                   filter(log10_rep_1_2, 
-                                          subpool == 'subpool2')$ratio_25B,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2)))
-
-p_rep_ratio_0_25 <- plot_grid(p_rep_ratio_0, p_rep_ratio_25, 
-                              nrow = 2, labels = c(' 0 µM', '25 µM'), 
-                              align = 'v', hjust = -3, vjust = -1, scale = 0.9)
-
-save_plot('plots/p_rep_ratio_0_25.png', p_rep_ratio_0_25,
-          base_width = 10.5, base_height = 7)
-
-#Background-normalized all subpools
-
-p_rep_backnorm_ratio_0 <- ggplot(data = NULL, 
-                                 aes(ratio_0A_norm, ratio_0B_norm)) +
-  facet_grid(. ~ subpool) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool5'),
-             color = '#440154FF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool3'),
-             color = '#33638DFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool4'),
-             color = '#29AF7FFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool2'),
-             color = '#DCE319FF', alpha = 0.3) +
-  geom_density2d(data = log10_rep_1_2_back_norm, 
-                 color = 'black', size = 0.2, bins = 10) +
-  geom_hline(yintercept = 0, alpha = 0.5) +
-  geom_vline(xintercept = 0, alpha = 0.5) +
-  annotation_logticks(scaled = TRUE) +
-  xlab("log10 background-norm.\nsum RNA/DNA BR 1") +
-  ylab("log10 background-norm.\nsum RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
-  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
-  background_grid(major = 'xy', minor = 'none') + 
-  panel_border() +
-  annotate("text", x = 0, y = 1.8, color = '#440154FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_0A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_0B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.5, color = '#33638DFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool3')$ratio_0A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool3')$ratio_0B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.2, color = '#29AF7FFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool4')$ratio_0A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool4')$ratio_0B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 0.9, color = '#DCE319FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool2')$ratio_0A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool2')$ratio_0B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2)))
-
-p_rep_backnorm_ratio_25 <- ggplot(data = NULL, 
-                                  aes(ratio_25A_norm, ratio_25B_norm)) +
-  facet_grid(. ~ subpool) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool5'),
-             color = '#440154FF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool3'),
-             color = '#33638DFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool4'),
-             color = '#29AF7FFF', alpha = 0.3) +
-  geom_point(data = filter(log10_rep_1_2_back_norm, subpool == 'subpool2'),
-             color = '#DCE319FF', alpha = 0.3) +
-  geom_density2d(data = log10_rep_1_2_back_norm, 
-                 color = 'black', size = 0.2, bins = 10) +
-  geom_hline(yintercept = 0, alpha = 0.5) +
-  geom_vline(xintercept = 0, alpha = 0.5) +
-  annotation_logticks(scaled = TRUE) +
-  xlab("log10 background-norm.\nsum RNA/DNA BR 1") +
-  ylab("log10 background-norm.\nsum RNA/DNA BR 2") +
-  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
-  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
-  background_grid(major = 'xy', minor = 'none') + 
-  panel_border() +
-  annotate("text", x = 0, y = 1.8, color = '#440154FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_25A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool5')$ratio_25B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.5, color = '#33638DFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool3')$ratio_25A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool3')$ratio_25B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 1.2, color = '#29AF7FFF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool4')$ratio_25A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool4')$ratio_25B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2))) +
-  annotate("text", x = 0, y = 0.9, color = '#DCE319FF', 
-           label = paste('r =', 
-                         round(cor(filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool2')$ratio_25A_norm,
-                                   filter(log10_rep_1_2_back_norm, 
-                                          subpool == 'subpool2')$ratio_25B_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"),
-                               2)))
-
-p_rep_backnorm_ratio_0_25 <- plot_grid(p_rep_backnorm_ratio_0, 
-                                       p_rep_backnorm_ratio_25, 
-                                       nrow = 2, labels = c(' 0 µM', '25 µM'), 
-                                       align = 'v', hjust = -3, vjust = -1, 
-                                       scale = 0.9)
-
-save_plot('plots/p_rep_backnorm_ratio_0_25.png', p_rep_backnorm_ratio_0_25,
-          base_width = 10.5, base_height = 7)
-
-
 #Showing what library looks like before and after normalizing to background
 
 induction_noback <- rep_1_2 %>%
@@ -653,21 +391,25 @@ induction_noback <- rep_1_2 %>%
   var_log2() %>%
   filter(subpool != 'control')
 
+test <- filter(induction_noback, 
+               startsWith(name, 
+                          'subpool5_no_site_no_site_no_site_no_site_no_site_no_site'))
+
 p_induction_noback <- ggplot(induction_noback, aes(induction)) +
-  facet_grid(. ~ subpool) +
   geom_density(kernel = 'gaussian') +
-  geom_vline(xintercept = -1.172789, alpha = 0.5) +
+  geom_vline(xintercept = -1.062606, alpha = 0.5) +
+  geom_vline(xintercept = -1.282916, alpha = 0.5) +
+  geom_vline(xintercept = -1.172845, alpha = 0.5) +
   annotation_logticks(scaled = TRUE, sides = 'b') +
-  xlab("Log2 induction of sum RNA reads") +
+  xlab("Log2 induction") +
   panel_border() +
   scale_x_continuous(limits = c(-2, 4), breaks = c(-2:4))
 
 p_induction_back <- ggplot(log2_rep_1_2_back_norm, aes(induction)) +
-  facet_grid(. ~ subpool) +
   geom_density(kernel = 'gaussian') +
   geom_vline(xintercept = 0, alpha = 0.5) +
   annotation_logticks(scaled = TRUE, sides = 'b') +
-  xlab("Log2 induction of background-norm. sum RNA reads") +
+  xlab("Log2 induction after\nbackground-normalization") +
   panel_border() +
   scale_x_continuous(limits = c(-2, 4), breaks = c(-2:4))
 
@@ -675,7 +417,7 @@ p_induction_back_compare <- plot_grid(p_induction_noback, p_induction_back,
                                       nrow = 2)
 
 save_plot('plots/p_induction_back_compare.png', p_induction_back_compare,
-          base_width = 9, base_height = 5)
+          base_width = 3, base_height = 5, scale = 1.2)
 
 
 #Comparison to integrated-------------------------------------------------------
@@ -1795,7 +1537,7 @@ ind_site_ind_back_log_p_r <- pred_resid(bin_site_s5, ind_site_ind_back_log_fit)
 #RNA/DNA
 
 bc_dna_join_rna <- function(df1, df2) {
-  filter_reads <- filter(df1, num_reads > 2)
+  filter_reads <- filter(df1, num_reads > 0)
   DNA_RNA_join <- left_join(filter_reads, df2,
                             by = c("barcode", "name", "subpool", 
                                    "most_common"), 
@@ -1823,7 +1565,7 @@ ratio_bc_med_var <- function(df1) {
     group_by(subpool, name, most_common) %>%
     filter(num_reads_RNA != 0) %>%
     summarize(barcodes_RNA = n())
-  bc_DNA_RNA <- inner_join(bc_count_DNA, bc_count_RNA, 
+  bc_DNA_RNA <- left_join(bc_count_DNA, bc_count_RNA, 
                            by = c('subpool', 'name', 'most_common'))
   med_ratio <- df1 %>%
     group_by(subpool, name, most_common) %>%
@@ -2023,7 +1765,7 @@ my_density <- function(data, mapping, ...) {
   ggplot(data = data, mapping = mapping) +
     geom_density(kernel = 'gaussian') +
     scale_x_continuous(limits = c(-1.5, 2), breaks = c(-1:2)) +
-    scale_y_continuous(limits = c(-0.5, 7.5)) +
+    scale_y_continuous(limits = c(-0.5, 8.5)) +
     annotation_logticks(sides = 'b')
 }
 
@@ -2091,6 +1833,45 @@ log10_med_rep_1_2_back_norm <- var_log10(med_rep_1_2_back_norm)
 
 #Determining subpool bias-------------------------------------------------------
 
+#Background-normalized all subpools
+
+p_rep_backnorm_ratio_0 <- ggplot(log10_rep_1_2_back_norm, 
+                                 aes(ratio_0A_norm, ratio_0B_norm)) +
+  facet_grid(. ~ subpool) +
+  geom_point(alpha = 0.2) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 background-norm.\nexpression rep. 1") +
+  ylab("log10 background-norm.\nexpression rep. 2") +
+  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
+  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border()
+
+p_rep_backnorm_ratio_25 <- ggplot(log10_rep_1_2_back_norm, 
+                                  aes(ratio_25A_norm, ratio_25B_norm)) +
+  facet_grid(. ~ subpool) +
+  geom_point(alpha = 0.2) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  annotation_logticks(scaled = TRUE) +
+  xlab("log10 background-norm.\nexpression rep. 1") +
+  ylab("log10 background-norm.\nexpression rep. 2") +
+  scale_x_continuous(breaks = c(0:2), limits = c(-0.5, 2)) + 
+  scale_y_continuous(breaks = c(0:2), limits = c(-0.5, 2)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  panel_border()
+
+p_rep_backnorm_ratio_0_25 <- plot_grid(p_rep_backnorm_ratio_0, 
+                                       p_rep_backnorm_ratio_25, 
+                                       nrow = 2, labels = c(' 0 µM', '25 µM'), 
+                                       align = 'v', hjust = -3, vjust = -1, 
+                                       scale = 0.9)
+
+save_plot('plots/p_rep_backnorm_ratio_0_25.png', p_rep_backnorm_ratio_0_25,
+          base_width = 10.5, base_height = 7)
+
 #Compare expression of sequences shared between subpool 2 and 5 at both 0 and 25
 #µM forksolin. This analysis was done on data normalized to background
 #expression levels to show the disparity between relative subpool expression
@@ -2112,8 +1893,8 @@ p_compare_back_norm_2_5_induction <- ggplot(compare_2_5_induction,
   geom_hline(yintercept = 1, alpha = 0.5) +
   geom_vline(xintercept = 1, alpha = 0.5) +
   scale_fill_viridis(discrete = TRUE) +
-  xlab("Subpool2 induction of\nbackground-normalized reads") +
-  ylab("Subpool5 induction of\nbackground-normalized reads")
+  xlab("Subpool2 induction after\nbackground-normalization") +
+  ylab("Subpool5 induction after\nbackground-normalization")
 
 save_plot('plots/p_compare_back_norm_2_5_induction.png', 
           p_compare_back_norm_2_5_induction, base_width = 4.3, base_height = 3,
@@ -2136,9 +1917,8 @@ p_compare_back_norm_2_5_0 <- ggplot(compare_2_5_ratio,
   geom_hline(yintercept = 1, alpha = 0.5) +
   geom_vline(xintercept = 1, alpha = 0.5) +
   geom_abline(slope = 1, intercept = 0) +
-  annotation_logticks(sides = 'bl') +
-  xlab("Subpool2 average\nbackground-norm. sum RNA/DNA") +
-  ylab("Subpool5 average\nbackground-norm. sum RNA/DNA") +
+  xlab("Subpool2 average\nbackground-normalized expression") +
+  ylab("Subpool5 average\nbackground-normalized expression") +
   scale_x_continuous(breaks = c(0:2), limits = c(0, 2.5)) + 
   scale_y_continuous(breaks = c(0:2), limits = c(0, 2.5))
 
@@ -2151,9 +1931,8 @@ p_compare_back_norm_2_5_25 <- ggplot(compare_2_5_ratio,
   geom_hline(yintercept = 1, alpha = 0.5) +
   geom_vline(xintercept = 1, alpha = 0.5) +
   geom_abline(slope = 1, intercept = 0) +
-  annotation_logticks(sides = 'bl') +
-  xlab("Subpool2 average\nbackground-norm. sum RNA/DNA") +
-  ylab("Subpool5 average\nbackground-norm. sum RNA/DNA") +
+  xlab("Subpool2 average\nbackground-normalized expression") +
+  ylab("Subpool5 average\nbackground-normalized expression") +
   scale_x_continuous(breaks = c(0:2), limits = c(0, 2.5)) + 
   scale_y_continuous(breaks = c(0:2), limits = c(0, 2.5))
 
