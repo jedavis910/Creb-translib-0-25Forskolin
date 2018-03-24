@@ -12,6 +12,8 @@ library(GGally)
 cbPalette7 <- c('#440154FF', '#39568CFF', '#287D8EFF', '#20A387FF', '#73D055FF',
                 '#B8DE29FF', '#FDE725FF')
 
+cbPalette3 <- c('#39568CFF', '#1F968BFF', '#73D055FF')
+
 #Written for transient library analyses of indexed reads corresponding to:
 #bc_JD02: RNA induced rep. 1
 #bc_JD03: RNA induced rep. 2
@@ -219,12 +221,9 @@ subpool2 <-
   select(-fluff1, -fluff2, -fluff3) %>%
   mutate(dist = ifelse(startsWith(site, 'consensusflank'), dist + 2, dist)) %>%
   group_by(background, site) %>%
-  mutate(med_ratio_25A_norm = median(ratio_25A_norm)) %>%
-  mutate(med_ratio_25B_norm = median(ratio_25B_norm)) %>%
+  mutate(med_induction = median(induction)) %>%
   ungroup() %>%
-  mutate(ratio_25A_norm_med = ratio_25A_norm/med_ratio_25A_norm) %>%
-  mutate(ratio_25B_norm_med = ratio_25B_norm/med_ratio_25B_norm) %>%
-  mutate(ave_ratio_25_norm_med = (ratio_25A_norm_med + ratio_25B_norm_med)/2)
+  mutate(induction_norm_med = induction/med_induction)
 
 
 #Subpool 3 contains 2 consensus binding sites with flanks (ATTGACGTCAGC) that 
@@ -248,7 +247,11 @@ subpool3 <-
   mutate(dist = as.integer(dist + 2)) %>%
   mutate(spacing = ifelse(spacing != as.integer(0), 
                           as.integer(spacing + 4), 
-                          as.integer(spacing))) 
+                          as.integer(spacing))) %>%
+  group_by(background, spacing) %>%
+  mutate(med_induction = median(induction)) %>%
+  ungroup() %>%
+  mutate(induction_norm_med = induction/med_induction)
 
 #Subpool 4 contains 2 binding sites with flanks that vary in site type from 
 #consensus (ATTGACGTCAGC) moderate (ATTGACGTCTGC) weak (ATTGAAGTCAGC) and 
@@ -645,42 +648,45 @@ save_plot('plots/m_control_3_5_0_25.png',
 
 #Subpool 2
 
-p_subpool2_dist_0_25 <- ggplot(filter(subpool2, site == 'consensusflank')) + 
-  facet_grid(~ background) + 
-  geom_point(aes(dist, ratio_25A_norm_med), 
-             alpha = 0.5, color = '#287D8EFF') +
-  geom_point(aes(dist, ratio_25B_norm_med), 
-             alpha = 0.5, color = '#73D055FF') +
-  geom_hline(yintercept = 1) +
-  geom_smooth(aes(dist, ave_ratio_25_norm_med), span = 0.1, size = 0.4,
-              se = FALSE, color = '#440154FF') +
+p_subpool2_dist_0_25 <- ggplot(filter(subpool2, site == 'consensusflank'),
+                               aes(dist, induction_norm_med)) + 
+  facet_grid(background ~ .) + 
+  geom_hline(yintercept = 1, alpha = 0.5) +
+  geom_point(alpha = 0.5, color = 'black') +
+  geom_smooth(span = 0.1, size = 0.4, se = TRUE, color = 'black') +
   scale_x_continuous("Distance from Proximal Promoter End (bp)", 
                      breaks = seq(from = 0, to = 150, by = 10)) +
-  panel_border() + ylab('Expression at\n25 µM norm. to median') +
+  panel_border() + ylab('Induction (a.u.)\nnorm. to median') +
   background_grid(major = 'xy', minor = 'none')
 
 save_plot('plots/subpool2_dist_0_25.png',
-          p_subpool2_dist_0_25, base_width = 46, base_height = 10,
-          scale = 0.3)
+          p_subpool2_dist_0_25, base_width = 5.5, base_height = 3,
+          scale = 1.3)
 
 #Subpool 3
 
-p_subpool3_induction <- ggplot(sep_3) + 
-  geom_point(aes(dist, induction_1), alpha = 0.3, size = 1.5) +
-  geom_point(aes(dist, induction_2), alpha = 0.3, size = 1.5) +
+p_subpool3_induction <- ggplot(filter(subpool3, spacing != 0 & spacing != 70),
+                               aes(dist, induction_norm_med)) + 
   facet_grid(spacing ~ background) + 
-  geom_smooth(aes(dist, ave_induction), span = 0.1, size = 0.7, 
-              se = FALSE) +
-  ylab('Average Induction Ratio') + 
+  geom_hline(yintercept = 1, alpha = 0.5) +
+  geom_point(alpha = 0.5, color = 'black', size = 1.2) +
+  geom_smooth(span = 0.1, size = 0.3, se = TRUE, color = 'black') +
+  ylab('Induction (a.u.)\nnorm. to median') + 
   panel_border() +
-  background_grid(major = 'xy', minor = 'none') +
+  background_grid(major = 'xy', minor = 'x', colour.minor = 'grey90') +
   scale_x_continuous(
     "Distance from First Site to Proximal Promoter End (bp)", 
-                     breaks = seq(from = 0, to = 150, by = 10))
+    breaks = seq(from = 0, to = 140, by = 20))
 
 save_plot('plots/subpool3_induction.png',
-          p_subpool3_induction, base_width = 46, base_height = 17,
-          scale = 0.35)
+          p_subpool3_induction, base_width = 8.5, base_height = 4,
+          scale = 1.3)
+
+p_s3_induction_box <- ggplot(filter(subpool3, spacing != 0 & spacing != 70),
+                             aes(dist, induction_norm_med)) +
+  facet_grid(background ~ .) +
+  geom_boxplot()
+
 
 
 p_subpool3_chr9_0_25 <- ggplot(filter(sep_3, 
@@ -809,42 +815,49 @@ s5_dup_6no <- function(df) {
   return(no_join_rm_mixed)
 }
 
-s5_no_mix <- s5_dup_6no(subpool5)
+s5_no_mix <- s5_dup_6no(subpool5) %>%
+  mutate(background = factor(background, 
+                              levels = c('s pGl4', 'v chr9', 'v chr5')))
 
-p_num_cons_weak <- ggplot(s5_no_mix, 
-                          aes(x = as.factor(total_sites), y = induction)) +
-  geom_boxplot(position = position_dodge(1)) +
+p_num_cons_weak <- ggplot(s5_no_mix, aes(as.factor(total_sites), induction)) +
+  geom_boxplot(aes(color = background), outlier.size = 0.7, size = 0.5, 
+               outlier.alpha = 0.5, position = position_dodge(1),
+               show.legend = TRUE) +
   scale_y_log10(limits = c(0.8, 20)) +
-  facet_grid(background ~ site_type) +
+  facet_grid(site_type ~ .) +
   panel_border() +
   annotation_logticks(sides = 'l') +
-  background_grid(major = 'y', minor = 'none') +
-  ylab('Average induction (a.u.)') +
+  scale_color_manual(values = cbPalette3) +
+  theme(legend.position = 'right', axis.ticks.x = element_blank(),
+        strip.background = element_rect(colour="black", fill="white")) +
+  background_grid(major = 'y', minor = 'none') + 
+  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
+  ylab('Induction (a.u.)') +
   xlab('Number of total sites')
 
 save_plot('plots/p_num_cons_weak.png', p_num_cons_weak,
-          base_width = 3.25, base_height = 4.5, scale = 1.5)
+          base_width = 4.75, base_height = 2.5, scale = 1.5)
 
 
 #Weak contribution to expression keeping # consensus constant and adding weak
 
-p_num_cons_num_weak <- ggplot(subpool5, 
-                              aes(x = as.factor(consensus), 
-                                  y = induction)) +
-  geom_boxplot(aes(color = as.factor(weak)), show.legend = TRUE,
-               position = position_dodge(1)) +
-  scale_y_log10(limits = c(0.8, 20)) +
-  facet_grid(background ~ .) + 
+p_num_cons_num_weak <- ggplot(filter(subpool5, background == 's pGl4'),
+                              aes(as.factor(consensus), induction)) +
+  geom_boxplot(aes(color = as.factor(weak)), outlier.size = 0.7, size = 0.5, 
+               outlier.alpha = 0.5, position = position_dodge(1),
+               show.legend = TRUE) +
+  scale_y_log10(limits = c(0.8, 20)) + 
   panel_border() +
   annotation_logticks(sides = 'lr') +
-  scale_color_manual(name = 'number of\nweak sites', values = cbPalette7) +
+  scale_color_manual(name = 'number of\nweak sites', values = cbPalette7)  +
+  theme(legend.position = 'right', axis.ticks.x = element_blank()) +
   background_grid(major = 'y', minor = 'none') + 
   geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('Average induction (a.u.)') +
+  ylab('Induction (a.u.)') +
   xlab('Number of consensus sites')
 
 save_plot('plots/p_num_cons_num_weak.png', p_num_cons_num_weak, scale = 1.5,
-          base_width = 6, base_height = 4.5)
+          base_width = 5, base_height = 2)
 
 
 #plot combinations of consensus and weak vs. their induced expression as a 
