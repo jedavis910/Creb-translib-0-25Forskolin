@@ -648,7 +648,7 @@ save_plot('plots/m_control_3_5_0_25.png',
 
 #Subpool 2
 
-p_subpool2_dist_0_25 <- ggplot(filter(subpool2, site == 'consensusflank'),
+p_subpool2_dist_ind_norm <- ggplot(filter(subpool2, site == 'consensusflank'),
                                aes(dist, induction_norm_med)) + 
   facet_grid(background ~ .) + 
   geom_hline(yintercept = 1, alpha = 0.5) +
@@ -659,19 +659,31 @@ p_subpool2_dist_0_25 <- ggplot(filter(subpool2, site == 'consensusflank'),
   panel_border() + ylab('Induction (a.u.)\nnorm. to median') +
   background_grid(major = 'xy', minor = 'none')
 
-save_plot('plots/subpool2_dist_0_25.png',
-          p_subpool2_dist_0_25, base_width = 5.5, base_height = 3,
+save_plot('plots/subpool2_dist_ind_norm.png',
+          p_subpool2_dist_ind_norm, base_width = 5.5, base_height = 3,
+          scale = 1.3)
+
+p_subpool2_dist_induction <- ggplot(filter(subpool2, site == 'consensusflank'),
+                                   aes(dist, induction)) + 
+  facet_grid(background ~ .) + 
+  geom_point(alpha = 0.5, color = 'black') +
+  geom_smooth(span = 0.1, size = 0.4, se = TRUE, color = 'black') +
+  scale_x_continuous("Distance from Proximal Promoter End (bp)", 
+                     breaks = seq(from = 0, to = 150, by = 10)) +
+  panel_border() + ylab('Induction (a.u.)') +
+  background_grid(major = 'xy', minor = 'none')
+
+save_plot('plots/subpool2_dist_induction.png',
+          p_subpool2_dist_induction, base_width = 5.5, base_height = 3,
           scale = 1.3)
 
 #Subpool 3
 
-p_subpool3_induction <- ggplot(filter(subpool3, spacing != 0 & spacing != 70),
-                               aes(dist, induction_norm_med)) + 
+p_subpool3_induction <- ggplot(subpool3, aes(dist, induction)) + 
   facet_grid(spacing ~ background) + 
-  geom_hline(yintercept = 1, alpha = 0.5) +
   geom_point(alpha = 0.5, color = 'black', size = 1.2) +
   geom_smooth(span = 0.1, size = 0.3, se = TRUE, color = 'black') +
-  ylab('Induction (a.u.)\nnorm. to median') + 
+  ylab('Induction (a.u.)') + 
   panel_border() +
   background_grid(major = 'xy', minor = 'x', colour.minor = 'grey90') +
   scale_x_continuous(
@@ -682,90 +694,86 @@ save_plot('plots/subpool3_induction.png',
           p_subpool3_induction, base_width = 8.5, base_height = 4,
           scale = 1.3)
 
-p_s3_induction_box <- ggplot(filter(subpool3, spacing != 0 & spacing != 70),
-                             aes(dist, induction_norm_med)) +
-  facet_grid(background ~ .) +
-  geom_boxplot()
+subpool3_bin <- subpool3 %>%
+  mutate(bin = cut(subpool3$dist, seq(from = 0, to = 140, by = 20),
+                   labels = c('0-20', '20-40', '40-60', '60-80',
+                              '80-100', '100-120', '120-140')))
 
+p_s3_induction_box <- ggplot(filter(subpool3_bin, spacing != 0 & spacing != 70),
+                             aes(bin, induction_norm_med)) +
+  geom_boxplot(aes(color = background), outlier.size = 0.7, size = 0.5, 
+               outlier.alpha = 0.5, position = position_dodge(1),
+               show.legend = TRUE) +
+  scale_color_manual(values = cbPalette3) +
+  theme(legend.position = 'right', axis.ticks.x = element_blank()) +
+  background_grid(major = 'y', minor = 'none') + 
+  geom_hline(yintercept = 1, alpha = 0.5) +
+  ylab('Induction (a.u.)\nnorm. to median') +
+  xlab('Distance from First Site to Proximal Promoter End (bp)')
 
+save_plot('plots/s3_induction_box.png',
+          p_s3_induction_box, base_width = 6.5, base_height = 4,
+          scale = 1.3)
 
-p_subpool3_chr9_0_25 <- ggplot(filter(sep_3, 
-                                           background == 'vista chr9')) + 
-  geom_point(aes(dist, ratio_0_1), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_0_2), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_25_1), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
-  geom_point(aes(dist, ratio_25_2), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
+p_subpool3_chr9_ind <- ggplot(filter(subpool3, 
+                                     background == 'v chr9' & spacing != 0 & spacing != 70),
+                               aes(dist, induction)) + 
+  geom_point(alpha = 0.5) +
   facet_grid(spacing ~ .) + 
-  geom_smooth(aes(dist, ave_ratio_0), span = 0.1, size = 0.4,
-              se = FALSE, color = '#999999') +
-  geom_smooth(aes(dist, ave_ratio_25), span = 0.1, size = 0.4,
-              se = FALSE, color = '#56B4E9') +
-  panel_border() +
+  geom_smooth(span = 0.1, size = 0.4, se = TRUE, color = 'black') +
+  panel_border() + 
+  ylab('Induction (a.u.)') +
+  background_grid(major = 'xy', minor = 'none') +
   scale_x_continuous("Distance from First Site to Proximal Promoter End (bp)", 
-                     breaks = seq(from = 0, to = 150, by = 10),
-                     limits = c(0, 135))
+                     breaks = seq(from = 0, to = 130, by = 10),
+                     limits = c(0, 130)) +
+  theme(strip.background = element_rect(colour="black", fill="white"))
 
-save_plot('plots/subpool3_chr9_0_25.png',
-          p_subpool3_chr9_0_25, base_width = 32, base_height = 20,
-          scale = 0.3)
+save_plot('plots/subpool3_chr9_ind.png',
+          p_subpool3_chr9_ind, base_width = 6, base_height = 4,
+          scale = 1.3)
 
-p_subpool3_chr9_5_0_25 <- ggplot(filter(sep_3, background == 'vista chr9')) + 
+p_subpool3_chr9_ind_5 <- ggplot(filter(subpool3, 
+                                        background == 'v chr9' & spacing != 0 & spacing != 70),
+                                 aes(dist, induction)) + 
+  geom_point(alpha = 0.5) +
+  facet_grid(spacing ~ .) + 
+  geom_smooth(span = 0.1, size = 0.4, se = TRUE, color = 'black') +
   geom_vline(xintercept = 4, color = 'black') +
-  geom_vline(xintercept = 14, color = 'black') +
-  geom_vline(xintercept = 24, color = 'black') +
-  geom_point(aes(dist, ratio_0_1), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_0_2), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_25_1), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
-  geom_point(aes(dist, ratio_25_2), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
-  facet_grid(spacing ~ .) + 
-  geom_smooth(aes(dist, ave_ratio_0), span = 0.1, size = 0.4,
-              se = FALSE, color = '#999999') +
-  geom_smooth(aes(dist, ave_ratio_25), span = 0.1, size = 0.4,
-              se = FALSE, color = '#56B4E9') +
-  panel_border() +
-  scale_y_continuous("Expression") +
+  geom_vline(xintercept = 14.3, color = 'black') +
+  geom_vline(xintercept = 24.6, color = 'black') +
+  panel_border() + 
+  ylab('Induction (a.u.)') +
+  background_grid(major = 'xy', minor = 'none') +
   scale_x_continuous("Distance from First Site to Proximal Promoter End (bp)", 
-                     breaks = seq(from = 0, to = 150, by = 10),
-                     limits = c(0, 135))
+                     breaks = seq(from = 0, to = 130, by = 10),
+                     limits = c(0, 130)) +
+  theme(strip.background = element_rect(colour="black", fill="white"))
 
-save_plot('plots/subpool3_chr9_5_0_25.png',
-          p_subpool3_chr9_5_0_25, base_width = 32, base_height = 20,
-          scale = 0.3)
+save_plot('plots/subpool3_chr9_ind_5.png',
+          p_subpool3_chr9_ind_5, base_width = 6, base_height = 4,
+          scale = 1.3)
 
-p_subpool3_chr9_10_0_25 <- ggplot(filter(sep_3, background == 'vista chr9')) + 
-  geom_vline(xintercept = 7, color = 'black') +
-  geom_vline(xintercept = 17, color = 'black') +
-  geom_vline(xintercept = 27, color = 'black') +
-  geom_point(aes(dist, ratio_0_1), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_0_2), alpha = 0.5, size = 1.2,
-             color = '#999999') +
-  geom_point(aes(dist, ratio_25_1), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
-  geom_point(aes(dist, ratio_25_2), alpha = 0.5, size = 1.2,
-             color = '#56B4E9') +
+p_subpool3_chr9_ind_10 <- ggplot(filter(subpool3, 
+                                         background == 'v chr9' & spacing != 0 & spacing != 70),
+                                  aes(dist, induction)) + 
+  geom_point(alpha = 0.5) +
   facet_grid(spacing ~ .) + 
-  geom_smooth(aes(dist, ave_ratio_0), span = 0.1, size = 0.4,
-              se = FALSE, color = '#999999') +
-  geom_smooth(aes(dist, ave_ratio_25), span = 0.1, size = 0.4,
-              se = FALSE, color = '#56B4E9') +
-  panel_border() +
-  scale_y_continuous("Expression") +
+  geom_smooth(span = 0.1, size = 0.4, se = TRUE, color = 'black') +
+  geom_vline(xintercept = 6.5, color = 'black') +
+  geom_vline(xintercept = 16.8, color = 'black') +
+  geom_vline(xintercept = 27.1, color = 'black') +
+  panel_border() + 
+  ylab('Induction (a.u.)') +
+  background_grid(major = 'xy', minor = 'none') +
   scale_x_continuous("Distance from First Site to Proximal Promoter End (bp)", 
-                     breaks = seq(from = 0, to = 150, by = 10),
-                     limits = c(0, 135))
+                     breaks = seq(from = 0, to = 130, by = 10),
+                     limits = c(0, 130)) +
+  theme(strip.background = element_rect(colour="black", fill="white"))
 
-save_plot('plots/subpool3_chr9_10_0_25.png',
-          p_subpool3_chr9_10_0_25, base_width = 32, base_height = 20,
-          scale = 0.3)
+save_plot('plots/subpool3_chr9_ind_10.png',
+          p_subpool3_chr9_ind_10, base_width = 6, base_height = 4,
+          scale = 1.3)
 
 
 #Subpool 5
