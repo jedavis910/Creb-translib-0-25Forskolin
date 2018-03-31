@@ -72,9 +72,8 @@ bc_join_DNA <- bc_map_join_bc(barcode_map, bc_DNA)
 #Determine variant counts by summing--------------------------------------------
 
 #sum unique barcodes and normalized bc reads across barcodes per variant. Output 
-#is barcodes and sum normalized reads per variant. Set a BC minimum of 8 per
-#variant, still need to check how this affects loss of variants per subpool
-#after joining all dfs
+#is barcodes and sum normalized reads per variant. Set a DNA BC minimum of 3 per
+#variant.
 
 var_sum_bc_num <- function(df1) {
   bc_count <- df1 %>%
@@ -679,6 +678,8 @@ save_plot('plots/subpool2_dist_induction.png',
 
 #Subpool 3
 
+#Induction of all spacing and backgrounds
+
 p_subpool3_induction <- ggplot(subpool3, aes(dist, induction)) + 
   facet_grid(spacing ~ background) + 
   geom_point(alpha = 0.5, color = 'black', size = 1.2) +
@@ -693,6 +694,9 @@ p_subpool3_induction <- ggplot(subpool3, aes(dist, induction)) +
 save_plot('plots/subpool3_induction.png',
           p_subpool3_induction, base_width = 8.5, base_height = 4,
           scale = 1.3)
+
+
+#Boxplots focusing on distance effects and spacing effects
 
 subpool3_bin <- subpool3 %>%
   mutate(bin = cut(subpool3$dist, seq(from = 0, to = 140, by = 20),
@@ -714,6 +718,27 @@ p_s3_induction_box <- ggplot(filter(subpool3_bin, spacing != 0 & spacing != 70),
 save_plot('plots/s3_induction_box.png',
           p_s3_induction_box, base_width = 6.5, base_height = 4,
           scale = 1.3)
+
+subpool3_back <- subpool3 %>%
+  mutate(background = factor(background, levels = c('s pGl4', 'v chr9', 'v chr5')))
+
+p_subpool3_spac_ind_box <- ggplot(filter(subpool3_back, dist <= 50), aes(as.factor(spacing), induction)) +
+  geom_boxplot(aes(color = background), outlier.size = 0.7, size = 0.5, 
+               outlier.alpha = 0.5, position = position_dodge(1),
+               show.legend = TRUE) +
+  scale_color_manual(values = cbPalette3) +
+  theme(legend.position = 'right', axis.ticks.x = element_blank()) +
+  geom_vline(xintercept = c(1.5:5.5), alpha = 0.5) +
+  background_grid(major = 'y', minor = 'none') + 
+  panel_border() +
+  ylab('Induction') +
+  xlab('Spacing')
+
+save_plot('plots/subpool3_spac_ind_box.png',
+          p_subpool3_spac_ind_box, base_width = 6.5, base_height = 4,
+          scale = 1.3)
+
+#Look at interplay of spacing and distance
 
 p_subpool3_chr9_ind <- ggplot(filter(subpool3, 
                                      background == 'v chr9' & spacing != 0 & spacing != 70),
@@ -780,31 +805,6 @@ save_plot('plots/subpool3_chr9_ind_10.png',
 
 #Plot number of sites vs. expression across backgrounds with plots separated by
 #just consensus, just weak and then combinations
-
-#Make untidy data with concentration as variable
-
-sp5_conc_exp <- function(df) {
-  df_0 <- df %>%
-    mutate(ave_barcode_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
-    select(site1, site2, site3, site4, site5, site6, most_common, background, 
-           consensus, weak, nosite, total_sites, site_combo, ave_barcode_0, 
-           ave_ratio_0_norm, induction) %>%
-    mutate(conc = 0) %>%
-    rename(ave_ratio_norm = ave_ratio_0_norm) %>%
-    rename(ave_barcode = ave_barcode_0)
-  df_25 <- df %>%
-    mutate(ave_barcode_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2) %>%
-    select(site1, site2, site3, site4, site5, site6, most_common, background, 
-           consensus, weak, nosite, total_sites, site_combo, ave_barcode_25, 
-           ave_ratio_25_norm, induction) %>%
-    mutate(conc = 25) %>%
-    rename(ave_ratio_norm = ave_ratio_25_norm) %>%
-    rename(ave_barcode = ave_barcode_25)
-  df_0_25 <- rbind(df_0, df_25)
-  return(df_0_25)
-}
-
-sp5_untidy_conc <- sp5_conc_exp(subpool5)
 
 #Plot # just consensus across all backgrounds for induced
 
@@ -1285,20 +1285,6 @@ save_plot('plots/p_site_highexp_0.png', p_site_highexp_0,
 
 #Fitting a model to the 6-site library------------------------------------------
 
-#subset to only fit to consensus sites
-
-s5_onlycons_log2 <- subpool5 %>%
-  filter(weak == 0) %>%
-  var_log2()
-
-bin_site_s5 <- s5_onlycons_log2 %>%
-  mutate(site1 = str_detect(site1, 'consensus') + 0) %>%
-  mutate(site2 = str_detect(site2, 'consensus') + 0) %>%
-  mutate(site3 = str_detect(site3, 'consensus') + 0) %>%
-  mutate(site4 = str_detect(site4, 'consensus') + 0) %>%
-  mutate(site5 = str_detect(site5, 'consensus') + 0) %>%
-  mutate(site6 = str_detect(site6, 'consensus') + 0)
-
 pred_resid <- function(df1, x) {
   df2 <- df1 %>%
     add_predictions(x)
@@ -1310,162 +1296,108 @@ pred_resid <- function(df1, x) {
 
 #Linear models
 
-#Just use total sites, independent background variable
+#Linear combination of # consensus + # weak + background
 
-totsite_ind_back <- function(df) {
-  model <- lm(ave_ratio_25_norm ~ total_sites + background, data = df)
+cons_weak_ind_back <- function(df) {
+  model <- lm(induction ~ consensus + weak + background, data = df)
 }
 
-totsite_ind_back_fit <- totsite_ind_back(bin_site_s5)
-summary(totsite_ind_back_fit)
-anova(totsite_ind_back_fit)
-totsite_ind_back_p_r <- pred_resid(bin_site_s5, totsite_ind_back_fit)
+cons_weak_ind_back_fit <- cons_weak_ind_back(subpool5)
+cons_weak_ind_back_sum <- summary(cons_weak_ind_back_fit)
+cons_weak_ind_back_anova <- tidy(anova(cons_weak_ind_back_fit)) %>% 
+  mutate(term_fctr = factor(term, levels = term))
+cons_weak_ind_back_p_r <- pred_resid(subpool5, cons_weak_ind_back_fit)
 
-ggplot(totsite_ind_back_p_r, aes(x = as.factor(total_sites))) +
-  facet_grid(. ~ background) +
-  geom_boxplot(aes(y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = pred), color = 'red')
-
-p_totsite_ind_back_r <- ggplot(totsite_ind_back_p_r, aes(ave_ratio_25_norm, pred,
-                                                         fill = total_sites)) +
+p_cons_weak_ind_back_r <- ggplot(cons_weak_ind_back_p_r, aes(induction, pred,
+                                                             fill = consensus)) +
   geom_point(shape = 21, alpha = 0.7) +
   scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 observed expression') + ylab('log2 predicted expression') +
-  annotate("text", x = 1, y = 5, 
+  xlab('Measured induction') + ylab('Predicted induction') +
+  theme(legend.position = 'right') +
+  annotate("text", x = 2.5, y = 10, 
            label = paste('r =', 
-                         round(cor(totsite_ind_back_p_r$pred,
-                                   totsite_ind_back_p_r$ave_ratio_25_norm,
+                         round(cor(cons_weak_ind_back_p_r$pred,
+                                   cons_weak_ind_back_p_r$induction,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"), 2)))
 
+p_cons_weak_ind_back_anova <- ggplot(cons_weak_ind_back_anova, 
+                                     aes(term_fctr, sumsq)) + 
+  geom_bar(stat = 'identity') + 
+  ylab('Sum of squares') +
+  xlab('Model term') + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        axis.ticks.x = element_blank())
 
-#All independent sites, no background variable
+p_cons_weak_ind_back_grid <- plot_grid(p_cons_weak_ind_back_r,  
+                                       p_cons_weak_ind_back_anova, 
+                                       nrow = 2)
 
-ind_site <- function(df) {
-  model <- lm(ave_ratio_25_norm ~ 
-                site1 + site2 + site3 + site4 + site5 + site6, data = df)
-}
-
-ind_site_fit <- ind_site(bin_site_s5)
-summary(ind_site_fit)
-anova(ind_site_fit)
-ind_site_p_r <- pred_resid(bin_site_s5, ind_site_fit)
-
-ggplot(ind_site_p_r, aes(x = as.factor(total_sites))) +
-  facet_grid(. ~ background) +
-  geom_boxplot(aes(y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = pred), color = 'red')
-
-ggplot(ind_site_p_r, aes(ave_ratio_25_norm, pred,
-                         fill = total_sites)) +
-  geom_point(shape = 21, alpha = 0.7) +
-  scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 observed expression') + ylab('log2 predicted expression') +
-  annotate("text", x = 1.6, y = 4, 
-           label = paste('r =', 
-                         round(cor(ind_site_p_r$pred,
-                                   ind_site_p_r$ave_ratio_25_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"), 2)))
-
-#All independent sites, with independent background variable
-
-ind_site_ind_back <- function(df) {
-  model <- lm(ave_ratio_25_norm ~ 
-                site1 + site2 + site3 + site4 + site5 + site6 + background, 
-              data = df)
-}
-
-ind_site_ind_back_fit <- ind_site_ind_back(bin_site_s5)
-summary(ind_site_ind_back_fit)
-anova(ind_site_ind_back_fit)
-ind_site_ind_back_p_r <- pred_resid(bin_site_s5, ind_site_ind_back_fit)
-
-ggplot(ind_site_ind_back_p_r, aes(x = as.factor(total_sites))) +
-  facet_grid(. ~ background) +
-  geom_boxplot(aes(y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = pred), color = 'red')
-
-p_ind_site_ind_back <- ggplot(ind_site_ind_back_p_r, aes(ave_ratio_25_norm, pred,
-                                                         fill = total_sites)) +
-  geom_point(shape = 21, alpha = 0.7) +
-  scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 observed expression') + ylab('log2 predicted expression') +
-  scale_y_continuous(limits = c(-1, 7.5)) +
-  annotate("text", x = 1, y = 5, 
-           label = paste('r =', 
-                         round(cor(ind_site_ind_back_p_r$pred,
-                                   ind_site_ind_back_p_r$ave_ratio_25_norm,
-                                   use = "pairwise.complete.obs", 
-                                   method = "pearson"), 2)))
-
-p_tsite_indsite <- plot_grid(p_totsite_ind_back_r, 
-                             p_ind_site_ind_back, nrow = 2)
-
-save_plot('plots/p_tsite_indsite.png', p_tsite_indsite, 
-          base_width = 5, base_height = 7, scale = 1.2)
+save_plot('plots/p_cons_weak_ind_back_grid.png', p_cons_weak_ind_back_grid,
+          scale = 1.3, base_width = 4, base_height = 5)
 
 
 #Including weak sites, all independent, independent background 
 
-subpool5_log2 <- var_log2(subpool5)
+ind_site_ind_back <- function(df) {
+  model <- lm(induction ~ site1 + site2 + site3 + site4 + site5 + site6 + background, 
+              data = df)
+}
 
-ind_site_ind_back_fit_nwc <- ind_site_ind_back(subpool5_log2)
-summary(ind_site_ind_back_fit_nwc)
-summary_nwc <- tidy(ind_site_ind_back_fit_nwc) %>%
+subpool5_ncw <- subpool5 %>%
+  mutate(site1 = gsub('nosite', 'anosite', site1)) %>%
+  mutate(site2 = gsub('nosite', 'anosite', site2)) %>%
+  mutate(site3 = gsub('nosite', 'anosite', site3)) %>%
+  mutate(site4 = gsub('nosite', 'anosite', site4)) %>%
+  mutate(site5 = gsub('nosite', 'anosite', site5)) %>%
+  mutate(site6 = gsub('nosite', 'anosite', site6))
+
+ind_site_ind_back_fit <- ind_site_ind_back(subpool5_ncw)
+ind_site_ind_back_sum <- tidy(ind_site_ind_back_fit) %>%
   filter(str_detect(term, '^site')) %>%
-  mutate(term = gsub('nosite', '_nosite', term)) %>%
+  mutate(term = gsub('consensus', '_consensus', term)) %>%
   mutate(term = gsub('weak', '_weak', term)) %>%
   separate(term, into = c('site', 'type'), sep = "_")
 
-anova_nwc <- tidy(anova(ind_site_ind_back_fit_nwc))
+ind_site_ind_back_anova <- tidy(anova(ind_site_ind_back_fit)) %>%
+  mutate(term_fctr = factor(term, levels = term))
+ind_site_ind_back_p_r <- pred_resid(subpool5_ncw, ind_site_ind_back_fit)
 
-ind_site_ind_back_nwc_p_r <- pred_resid(subpool5_log2, ind_site_ind_back_fit_nwc)
-
-ggplot(ind_site_ind_back_nwc_p_r, aes(x = as.factor(total_sites))) +
-  facet_grid(. ~ background) +
-  geom_boxplot(aes(y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(y = pred), color = 'red')
-
-p_ind_site_ind_back_nwc <- ggplot(ind_site_ind_back_nwc_p_r, 
-                                  aes(ave_ratio_25_norm, pred, 
-                                      fill = consensus)) +
+p_ind_site_ind_back <- ggplot(ind_site_ind_back_p_r, 
+                              aes(induction, pred, fill = consensus)) +
   geom_point(shape = 21, alpha = 0.5) +
   scale_fill_viridis() +
-  annotation_logticks(sides = 'bl') +
-  xlab('log2 observed expression') + ylab('log2 predicted\nexpression') +
-  scale_y_continuous(limits = c(-1.5, 8.5)) +
-  annotate("text", x = 1, y = 5, 
+  xlab('Measured induction') + ylab('Predicted induction') +
+  annotate("text", x = 2.5, y = 10, 
            label = paste('r =', 
-                         round(cor(ind_site_ind_back_nwc_p_r$pred,
-                                   ind_site_ind_back_nwc_p_r$ave_ratio_25_norm,
+                         round(cor(ind_site_ind_back_p_r$pred,
+                                   ind_site_ind_back_p_r$induction,
                                    use = "pairwise.complete.obs", 
                                    method = "pearson"), 2)))
 
-p_ind_site_ind_back_nwc_sum <- ggplot(summary_nwc, aes(site, estimate, fill = type)) + 
+p_ind_site_ind_back_sum <- ggplot(ind_site_ind_back_sum, 
+                                  aes(site, estimate, fill = type)) + 
   geom_bar(stat = 'identity', position = 'dodge') + 
-  scale_x_discrete(position = 'top') + 
+  scale_x_discrete(position = 'bottom') + 
   scale_fill_viridis(discrete = TRUE) + 
-  ylab('log2 weight relative\nto consensus')
+  theme(axis.ticks.x = element_blank()) +
+  ylab('Weight')
 
-p_ind_site_ind_back_nwc_anova <- anova_nwc %>% 
-  mutate(term_fctr = factor(term, levels = term)) %>% 
+p_ind_site_ind_back_anova <- ind_site_ind_back_anova %>%
   ggplot(aes(term_fctr, sumsq)) + 
     geom_bar(stat = 'identity') + 
   ylab('Sum of squares') +
   xlab('Model term') + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        axis.ticks.x = element_blank())
 
-p_ind_sit_ind_back_nwc_grid <- plot_grid(p_ind_site_ind_back_nwc, 
-          p_ind_site_ind_back_nwc_sum, 
-          p_ind_site_ind_back_nwc_anova,
-          nrow = 3)
+p_ind_sit_ind_back_grid <- plot_grid(p_ind_site_ind_back, 
+                                     p_ind_site_ind_back_sum, 
+                                     p_ind_site_ind_back_anova,
+                                     nrow = 3)
 
-save_plot('plots/p_ind_sit_ind_back_nwc_grid.png', p_ind_sit_ind_back_nwc_grid,
-          base_width = 5, base_height = 8)
+save_plot('plots/p_ind_sit_ind_back_grid.png', p_ind_sit_ind_back_grid,
+          scale = 1.3, base_width = 5, base_height = 8)
 
 
 #Non-linear models
@@ -1516,10 +1448,10 @@ save_plot('plots/p_log_curve.png', p_log_curve,
 
 subpool5_norm_max <- function(df) {
   max <- df %>%
-    summarise(max_ave_ratio_25_norm = max(ave_ratio_25_norm))
+    summarise(max_induction = max(induction))
   df_norm_max <- df %>%
     cbind(max) %>%
-    mutate(ave_ratio_25_norm = ave_ratio_25_norm/max_ave_ratio_25_norm) %>%
+    mutate(induction = induction/max_induction) %>%
     mutate(site1 = factor(site1, levels = c('nosite', 'weak', 'consensus')))%>%
     mutate(site2 = factor(site2, levels = c('nosite', 'weak', 'consensus')))%>%
     mutate(site3 = factor(site3, levels = c('nosite', 'weak', 'consensus')))%>%
@@ -1534,27 +1466,41 @@ subpool5_binomial <- subpool5_norm_max(subpool5)
 #Need to fix this, Warning message: In eval(expr, envir, enclos) : non-integer 
 # #successes in a binomial glm!
 
-ind_site_ind_back_log <- function(df) {
-  model <- glm(ave_ratio_25_norm ~ 
+ind_site_ind_back_binom <- function(df) {
+  model <- glm(induction ~ 
                  site1 + site2 + site3 + site4 + site5 + site6 + background, 
                data = df, family = binomial(link = 'logit'))
 }
 
-ind_site_ind_back_log_fit <- ind_site_ind_back_log(subpool5_binomial)
+ind_site_ind_back_binom_fit <- ind_site_ind_back_binom(subpool5_binomial)
 
-summary_log_nwc <- tidy(ind_site_ind_back_log_fit) %>%
+summary_binom <- tidy(ind_site_ind_back_binom_fit) %>%
   filter(str_detect(term, '^site')) %>%
   mutate(term = gsub('nosite', '_nosite', term)) %>%
   mutate(term = gsub('weak', '_weak', term)) %>%
   separate(term, into = c('site', 'type'), sep = "_")
 
-tidy(anova(ind_site_ind_back_log_fit))
-ind_site_ind_back_log_p_r <- pred_resid(bin_site_s5, ind_site_ind_back_log_fit)
+tidy(anova(ind_site_ind_back_binom_fit))
+ind_site_ind_back_binom_p_r <- pred_resid(subpool5_binomial, 
+                                        ind_site_ind_back_binom_fit)
+
+p_ind_site_ind_back_binom <- ggplot(ind_site_ind_back_binom_p_r, 
+                                  aes(induction, pred, 
+                                      fill = consensus)) +
+  geom_point(shape = 21, alpha = 0.5) +
+  scale_fill_viridis() +
+  xlab('Normalized induction') + ylab('Predicted\nnormalized induction') +
+  annotate("text", x = 0.25, y = 0.5, 
+           label = paste('r =', 
+                         round(cor(ind_site_ind_back_binom_p_r$pred,
+                                   ind_site_ind_back_binom_p_r$induction,
+                                   use = "pairwise.complete.obs", 
+                                   method = "pearson"), 2)))
 
 
 #Median analysis of expression--------------------------------------------------
 
-#Filter DNA reads to set a minimum of 3 reads per BC join with RNA and determine
+#Filter DNA reads to set a minimum of 1 read per BC join with RNA and determine
 #RNA/DNA
 
 bc_dna_join_rna <- function(df1, df2) {
@@ -1811,45 +1757,67 @@ p_med_vs_sum_25 <- ggpairs(med_vs_sum_25,
 save_plot('plots/p_med_vs_sum_25.png', p_med_vs_sum_25, scale = 1.5)
 
 
-#Normalize to background
+#Do higher DNA BC reads contribute to high sum/median ratios?
 
-med_back_norm_1_ind_2 <- function(df1) {
-  gsub_1_2 <- df1 %>%
-    ungroup () %>%
-    filter(subpool != 'control') %>%
-    mutate(
-      name = gsub('Smith R. Vista chr9:83712599-83712766', 'v chr9', name),
-      name = gsub('Vista Chr5:88673410-88674494', 'v chr5', name),
-      name = gsub('scramble pGL4.29 Promega 1-63 \\+ 1-87', 's pGl4', name)
-    ) %>%
-    mutate(background = name) %>%
-    mutate(background = str_sub(background, 
-                                nchar(background)-5, 
-                                nchar(background)))
-  backgrounds <- gsub_1_2 %>%
-    filter(startsWith(name, 
-                      'subpool5_no_site_no_site_no_site_no_site_no_site_no_site')) %>%
-    select(background, med_ratio_0A, med_ratio_0B, 
-           med_ratio_25A, med_ratio_25B) %>%
-    rename(med_ratio_0A_back = med_ratio_0A) %>%
-    rename(med_ratio_0B_back = med_ratio_0B) %>%
-    rename(med_ratio_25A_back = med_ratio_25A) %>%
-    rename(med_ratio_25B_back = med_ratio_25B)
-  back_join_norm <- left_join(gsub_1_2, backgrounds, by = 'background') %>%
-    mutate(med_ratio_0A_norm = med_ratio_0A/med_ratio_0A_back) %>%
-    mutate(med_ratio_0B_norm = med_ratio_0B/med_ratio_0B_back) %>%
-    mutate(med_ratio_25A_norm = med_ratio_25A/med_ratio_25A_back) %>%
-    mutate(med_ratio_25B_norm = med_ratio_25B/med_ratio_25B_back) %>%
-    mutate(ave_med_ratio_0_norm = (med_ratio_0A_norm + med_ratio_0B_norm)/2) %>%
-    mutate(ave_med_ratio_25_norm = (med_ratio_25A_norm + med_ratio_25B_norm)/2) %>%
-    mutate(induction = ave_med_ratio_25_norm/ave_med_ratio_0_norm)
+#Do this plot and save when have time to run it
+
+#combine sum and median values, take sum/med
+
+sum_over_med_join <- function(sum, med) {
+  sum_select_1 <- sum %>%
+    select(name, ratio_0A, ratio_25A)
+  med_select_1 <- med %>%
+    select(name, med_ratio_0A, med_ratio_25A)
+  sum_med_1 <- inner_join(sum_select_1, med_select_1, by = 'name') %>%
+    mutate(sum_over_med_0 = ratio_0A/med_ratio_0A) %>%
+    mutate(sum_over_med_25 = ratio_25A/med_ratio_25A) %>%
+    mutate(replicate = 1) %>%
+    select(name, sum_over_med_0, sum_over_med_25, replicate)
+  sum_select_2 <- sum %>%
+    select(name, ratio_0B, ratio_25B)
+  med_select_2 <- med %>%
+    select(name, med_ratio_0B, med_ratio_25B)
+  sum_med_2 <- inner_join(sum_select_2, med_select_2, by = 'name') %>%
+    mutate(sum_over_med_0 = ratio_0B/med_ratio_0B) %>%
+    mutate(sum_over_med_25 = ratio_25B/med_ratio_25B) %>%
+    mutate(replicate = 2) %>%
+    select(name, sum_over_med_0, sum_over_med_25, replicate)
+  sum_med_rep <- rbind(sum_med_1, sum_med_2)
+  return(sum_med_rep)
 }
 
-med_rep_1_2_back_norm <- med_back_norm_1_ind_2(med_rep_1_2)
+sum_over_med <- sum_over_med_join(rep_1_2, med_rep_1_2_0rm)
 
-log2_med_rep_1_2_back_norm <- var_log2(med_rep_1_2_back_norm)
+#Combine sum/med with average DNA BC reads
 
-log10_med_rep_1_2_back_norm <- var_log10(med_rep_1_2_back_norm)
+DNA_norm_join_som <- function(df1, df2) {
+  DNA1 <- df1 %>%
+    select(barcode, name, normalized)
+  DNA_join_som <- left_join(df2, DNA1, by = c('name'))
+  return(DNA_join_som)
+}
+
+DNA_sum_over_med <- DNA_norm_join_som(bc_join_DNA, sum_over_med)
+
+p_DNA_sum_over_med_0 <- ggplot(DNA_sum_over_med, aes(sum_over_med_0, normalized)) +
+  facet_grid(~ replicate) +
+  geom_point(alpha = 0.2) +
+  theme(strip.background = element_rect(colour="black", fill="white")) +
+  panel_border() + 
+  xlab('Variant sum/med') +
+  ylab('Normalized DNA BC reads')
+
+save_plot('plots/DNA_sum_over_med_0.png', p_DNA_sum_over_med_0, scale = 1.3)
+
+p_DNA_sum_over_med_25 <- ggplot(DNA_sum_over_med, aes(sum_over_med_25, normalized)) +
+  facet_grid(~ replicate) +
+  geom_point(alpha = 0.2) +
+  theme(strip.background = element_rect(colour="black", fill="white")) +
+  panel_border() + 
+  xlab('Variant sum/med') +
+  ylab('Normalized DNA BC reads')
+
+save_plot('plots/DNA_sum_over_med_25.png', p_DNA_sum_over_med_25, scale = 1.3)
 
 
 #Determining subpool bias-------------------------------------------------------
