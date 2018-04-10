@@ -14,6 +14,8 @@ cbPalette7 <- c('#440154FF', '#39568CFF', '#287D8EFF', '#20A387FF', '#73D055FF',
 
 cbPalette3 <- c('#39568CFF', '#1F968BFF', '#73D055FF')
 
+cbPalette2 <- c('#39568CFF', '#95D840FF')
+
 #Written for transient library analyses of indexed reads corresponding to:
 #bc_JD02: RNA induced rep. 1
 #bc_JD03: RNA induced rep. 2
@@ -53,12 +55,12 @@ bc_map_join_bc <- function(df1, df2) {
   df2 <- df2 %>%
     mutate(normalized = as.numeric((num_reads * 1000000) / (sum(num_reads))))
   keep_bc <- left_join(df1, df2, by = 'barcode') %>%
-    mutate(normalized = if_else(is.na(normalized), 
-                               0, 
-                               normalized)) %>%
+    mutate(normalized = if_else(is.na(normalized),
+                                0, 
+                                normalized)) %>%
     mutate(num_reads = if_else(is.na(num_reads), 
-                                as.integer(0), 
-                                num_reads))
+                               as.integer(0), 
+                               num_reads))
   return(keep_bc)
 }
 
@@ -801,6 +803,43 @@ save_plot('plots/subpool3_chr9_ind_10.png',
           scale = 1.3)
 
 
+#Subpool 4
+
+s4_mod_cons <- subpool4 %>%
+  filter(spacing != 0, site1 == 'consensus' | site1 == 'moderate',
+         site2 == 'consensus' | site2 == 'moderate')
+
+ggplot(s4_mod_cons, aes(as.factor(spacing), induction, color = as.factor(background))) +
+  facet_grid(~ moderate) +
+  geom_boxplot(outlier.size = 0.7, size = 0.5, 
+               outlier.alpha = 0.5, position = position_dodge(1),
+               show.legend = TRUE) +
+  scale_color_manual(values = cbPalette3) +
+  theme(legend.position = 'right', axis.ticks.x = element_blank()) +
+  geom_vline(xintercept = c(1.5:3.5), alpha = 0.5) +
+  background_grid(major = 'y', minor = 'none') + 
+  panel_border() +
+  ylab('Induction') +
+  xlab('Spacing (bp)')
+
+s4_mod_cons_1 <- subpool4 %>%
+  filter(consensus == 1 & moderate == 1 & spacing != 0)
+
+p_s4_mod_cons_1 <- ggplot(s4_mod_cons_1, aes(dist, induction, color = site1)) +
+  facet_grid(spacing ~ background) +
+  scale_color_manual(values = cbPalette2) +
+  geom_point() +
+  geom_line() +
+  panel_border() +
+  background_grid(major = 'xy') +
+  theme(strip.background = element_rect(colour="black", fill="white")) +
+  ylab('Induction') +
+  xlab('Distance (bp)')
+
+save_plot('plots/s4_mod_cons_1.png', p_s4_mod_cons_1, scale = 1.3,
+          base_width = 8, base_height = 4)
+
+
 #Subpool 5
 
 #Plot number of sites vs. expression across backgrounds with plots separated by
@@ -867,80 +906,123 @@ p_num_cons_num_weak <- ggplot(filter(subpool5, background == 's pGl4'),
 save_plot('plots/p_num_cons_num_weak.png', p_num_cons_num_weak, scale = 1.5,
           base_width = 5, base_height = 2)
 
-
-#plot combinations of consensus and weak vs. their induced expression as a 
-#function of the total number of sites filled
-
-p_num_sites_num_weak_c <- ggplot(filter(subpool5, weak == 0),
-                               aes(x = as.factor(total_sites), 
-                                   y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
-               position = position_dodge(1)) +
-  facet_grid(background ~ .) + 
+p_num_cons_num_weak_allb <- ggplot(subpool5,
+                              aes(as.factor(consensus), induction)) +
+  geom_boxplot(aes(color = as.factor(weak)), outlier.size = 0.7, size = 0.5, 
+               outlier.alpha = 0.5, position = position_dodge(1),
+               show.legend = TRUE) +
+  facet_grid(background ~ .) +
+  scale_y_log10(limits = c(0.8, 20)) + 
   panel_border() +
-  scale_color_manual(values = cbPalette7) +
   annotation_logticks(sides = 'lr') +
+  scale_color_manual(name = 'number of\nweak sites', values = cbPalette7)  +
+  theme(legend.position = 'right', axis.ticks.x = element_blank(),
+        strip.background = element_rect(colour="black", fill="white")) +
   background_grid(major = 'y', minor = 'none') + 
   geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('log10 background-normalized\nexpression at 25 µM') +
-  xlab('Number of binding sites')
+  ylab('Induction (a.u.)') +
+  xlab('Number of consensus sites')
 
-save_plot('plots/p_num_sites_num_weak_c.png', p_num_sites_num_weak_c, scale = 1.3,
-          base_width = 6, base_height = 4)
+save_plot('plots/p_num_cons_num_weak_allb.png', p_num_cons_num_weak_allb, 
+          scale = 1.5, base_width = 5, base_height = 3.5)
 
-p_num_sites_num_weak_cw1 <- ggplot(filter(subpool5, weak <= 1),
-                                 aes(x = as.factor(total_sites), 
-                                     y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
-               position = position_dodge(1)) +
-  scale_y_log10() +
-  facet_grid(background ~ .) + 
-  panel_border() +
-  scale_color_manual(values = cbPalette7) +
-  annotation_logticks(sides = 'lr') +
-  background_grid(major = 'y', minor = 'none') + 
-  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('log10 background-normalized\nexpression at 25 µM') +
-  xlab('Number of binding sites')
 
-save_plot('plots/p_num_sites_num_weak_cw1.png', p_num_sites_num_weak_cw1, scale = 1.3,
-          base_width = 6, base_height = 4)
+#Looked at clustering of site type effects, just simply plotted best example of 
+#clustered and dispersed expression in 3 cons 3 weak design, did not see
+#obvious trend
 
-p_num_sites_num_weak_cw2 <- ggplot(filter(subpool5, weak <= 2),
-                                  aes(x = as.factor(total_sites), 
-                                      y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
-               position = position_dodge(1)) +
-  scale_y_log10() +
-  facet_grid(background ~ .) + 
-  panel_border() +
-  scale_color_manual(values = cbPalette7) +
-  annotation_logticks(sides = 'lr') +
-  background_grid(major = 'y', minor = 'none') + 
-  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('log10 background-normalized\nexpression at 25 µM') +
-  xlab('Number of binding sites')
+s5_cluster_disp_c3w3 <- function(df) {
+  c3w3 <- df  %>%
+    filter(consensus == 3 & weak == 3)
+  cluster <- c3w3 %>%
+    filter((site1 == 'weak' & site2 == 'weak' & site3 == 'weak') | (site4 == 'weak' & site5 == 'weak' & site6 == 'weak')) %>%
+    mutate(distribution = 'clustered')
+  disperse <- c3w3 %>%
+    filter((site1 == 'weak' & site3 == 'weak' & site5 == 'weak') | (site2 == 'weak' & site4 == 'weak' & site6 == 'weak')) %>%
+    mutate(distribution = 'dispersed')
+  c3w3_distr <- rbind(cluster, disperse)
+  return(c3w3_distr)
+}
 
-save_plot('plots/p_num_sites_num_weak_cw2.png', p_num_sites_num_weak_cw2, scale = 1.3,
-          base_width = 6, base_height = 4)
+test5 <- s5_cluster_disp_c3w3(subpool5)
 
-p_num_sites_num_weak_cw6 <- ggplot(subpool5,
-                                  aes(x = as.factor(total_sites), 
-                                      y = ave_ratio_25_norm)) +
-  geom_boxplot(aes(color = as.factor(weak)), show.legend = FALSE,
-               position = position_dodge(1)) +
-  scale_y_log10() +
-  facet_grid(background ~ .) + 
-  panel_border() +
-  scale_color_manual(values = cbPalette7) +
-  annotation_logticks(sides = 'lr') +
-  background_grid(major = 'y', minor = 'none') + 
-  geom_vline(xintercept = c(1.5:6.5), alpha = 0.5) +
-  ylab('log10 background-normalized\nexpression at 25 µM') +
-  xlab('Number of binding sites')
+ggplot(test5, aes(background, induction)) +
+  geom_point(aes(color = distribution))
 
-save_plot('plots/p_num_sites_num_weak_cw6.png', p_num_sites_num_weak_cw6, scale = 1.3,
-          base_width = 6, base_height = 4)
+#Looking at clustering as addition of weak only and consensus only organization 
+#to make the combined organization and looking for synergism in combinations 
+#based on clustering. Did not see an obvious trend....
+
+s5_cluster_norm_cw <- function(df) {
+  c3w3 <- df  %>%
+    filter(consensus == 3 & weak == 3)
+  w3 <- df %>%
+    filter(consensus == 0 & weak == 3)
+  c3 <- df %>%
+    filter(consensus == 3 & weak == 0)
+  w123 <- w3 %>%
+    filter(site1 == 'weak' & site2 == 'weak' & site3 == 'weak') %>%
+    select(background, induction) %>%
+    rename(induction_w3 = induction)
+  c456 <- c3 %>%
+    filter(site4 == 'consensus' & site5 == 'consensus' & site6 == 'consensus') %>%
+    select(background, induction) %>%
+    rename(induction_c3 = induction)
+  wwwccc <- c3w3 %>%
+    filter(site1 == 'weak' & site2 == 'weak' & site3 == 'weak') %>%
+    left_join(w123) %>%
+    left_join(c456) %>%
+    mutate(distribution = 'clustered')
+  w456 <- w3 %>%
+    filter(site4 == 'weak' & site5 == 'weak' & site6 == 'weak') %>%
+    select(background, induction) %>%
+    rename(induction_w3 = induction)
+  c123 <- c3 %>%
+    filter(site1 == 'consensus' & site2 == 'consensus' & site3 == 'consensus') %>%
+    select(background, induction) %>%
+    rename(induction_c3 = induction)
+  cccwww <- c3w3 %>%
+    filter(site4 == 'weak' & site5 == 'weak' & site6 == 'weak') %>%
+    left_join(w456) %>%
+    left_join(c123) %>%
+    mutate(distribution = 'clustered')
+  w135 <- w3 %>%
+    filter(site1 == 'weak' & site3 == 'weak' & site5 == 'weak') %>%
+    select(background, induction) %>%
+    rename(induction_w3 = induction)
+  c246 <- c3 %>%
+    filter(site2 == 'consensus' & site4 == 'consensus' & site6 == 'consensus') %>%
+    select(background, induction) %>%
+    rename(induction_c3 = induction)
+  wcwcwc <- c3w3 %>%
+    filter(site1 == 'weak' & site3 == 'weak' & site5 == 'weak') %>%
+    left_join(w135) %>%
+    left_join(c246) %>%
+    mutate(distribution = 'dispersed')
+  w246 <- w3 %>%
+    filter(site2 == 'weak' & site4 == 'weak' & site6 == 'weak') %>%
+    select(background, induction) %>%
+    rename(induction_w3 = induction)
+  c135 <- c3 %>%
+    filter(site1 == 'consensus' & site3 == 'consensus' & site5 == 'consensus') %>%
+    select(background, induction) %>%
+    rename(induction_c3 = induction)
+  cwcwcw <- c3w3 %>%
+    filter(site2 == 'weak' & site4 == 'weak' & site6 == 'weak') %>%
+    left_join(w246) %>%
+    left_join(c135) %>%
+    mutate(distribution = 'dispersed')
+  cluster_disperse_norm <- rbind(wwwccc, cccwww, wcwcwc, cwcwcw) %>%
+    mutate(induction_norm = induction/(induction_c3 + induction_w3))
+  return(cluster_disperse_norm)
+}
+
+test_s5 <- s5_cluster_norm_cw(subpool5)
+
+ggplot(test_s5, aes(background, induction_norm)) +
+  geom_point(aes(color = distribution))
+
+
 
 
 #Filter out sites that have higher induced expression than their 6 consensus 
