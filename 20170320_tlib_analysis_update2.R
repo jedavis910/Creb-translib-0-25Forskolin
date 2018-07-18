@@ -16,6 +16,8 @@ cbPalette3 <- c('#39568CFF', '#1F968BFF', '#73D055FF')
 
 cbPalette2 <- c('#39568CFF', '#95D840FF')
 
+forskolin2 <- c('white', 'aquamarine3')
+
 #Written for transient library analyses of indexed reads corresponding to:
 #bc_JD02: RNA induced rep. 1
 #bc_JD03: RNA induced rep. 2
@@ -97,7 +99,7 @@ variant_counts_R25B <- var_sum_bc_num(bc_join_R25B)
 variant_counts_R0A <- var_sum_bc_num(bc_join_R0A)
 variant_counts_R0B <- var_sum_bc_num(bc_join_R0B)
 variant_counts_DNA <- var_sum_bc_num(bc_join_DNA) %>%
-  filter(barcodes > 2)
+  filter(barcodes > 7)
 
 
 #Normalizing RNA reads to DNA---------------------------------------------------
@@ -110,8 +112,8 @@ var_expression <- function(df1, df2) {
   RNA_DNA <- inner_join(df1, df2, 
                         by = c("name", "subpool", "most_common"), 
                         suffix = c("_RNA", "_DNA")) %>%
-    mutate(ratio = sum_RNA / sum_DNA) %>%
-    filter(ratio > 0)
+    filter(sum_RNA > 0) %>%
+    mutate(ratio = sum_RNA / sum_DNA)
   print('x defined as RNA, y defined as DNA in var_expression(x,y)')
   return(RNA_DNA)
 }
@@ -201,6 +203,31 @@ log10_rep_1_2_back_norm <- var_log10(rep_1_2_back_norm) %>%
   mutate(ave_barcodes_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2)
 
 
+#Make untidy data to plot both concentrations as a variable---------------------
+
+var_conc_exp <- function(df) {
+  df_0 <- df %>%
+    mutate(ave_barcode_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
+    select(subpool, name, most_common, background, ave_barcode_0, 
+           ave_ratio_0_norm) %>%
+    mutate(conc = 0) %>%
+    rename(ave_ratio_norm = ave_ratio_0_norm) %>%
+    rename(ave_barcode = ave_barcode_0)
+  df_25 <- df %>%
+    mutate(ave_barcode_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2) %>%
+    select(subpool, name, most_common, background, ave_barcode_25, 
+           ave_ratio_25_norm) %>%
+    mutate(conc = 25) %>%
+    rename(ave_ratio_norm = ave_ratio_25_norm) %>%
+    rename(ave_barcode = ave_barcode_25)
+  df_0_25 <- rbind(df_0, df_25)
+  return(df_0_25)
+}
+
+rep_1_2_back_norm_conc <- var_conc_exp(rep_1_2_back_norm)
+
+
+
 #Subpool separation-------------------------------------------------------------
 
 #Separate string qualifiers per subpool
@@ -210,22 +237,25 @@ log10_rep_1_2_back_norm <- var_log10(rep_1_2_back_norm) %>%
 #subpools. Each site is placed on the background starting closest to minP and 
 #are then moved along the backgrounds at 1 bp increments. Separation lists the 
 #type of site, the distance (start of the consensus site) and the background 
-#used. Added 2 bp to consensusflank so that the start of the binding site is 
-#represented instead of the start of the flank
+#used. Added added 64 to measure distance of site to minimal promoter then added
+#2 bp to consensusflank so that the start of the binding site is represented 
+#instead of the start of the flank
 
-subpool2 <- 
-  filter(rep_1_2_back_norm, subpool == "subpool2") %>%
-  ungroup() %>%
-  select(-subpool) %>%
-  separate(name, into = c("fluff1", "site", "fluff2", "dist", "fluff3"),
-           sep = "_", convert = TRUE) %>% 
-  select(-fluff1, -fluff2, -fluff3) %>%
-  mutate(dist = ifelse(startsWith(site, 'consensusflank'), dist + 2, dist)) %>%
-  group_by(background, site) %>%
-  mutate(med_induction = median(induction)) %>%
-  ungroup() %>%
-  mutate(induction_norm_med = induction/med_induction)
+subpool2 <- function(df) {
+  df <- df %>%
+    filter(subpool == "subpool2") %>%
+    ungroup() %>%
+    select(-subpool) %>%
+    separate(name, into = c("fluff1", "site", "fluff2", "dist", "fluff3"),
+             sep = "_", convert = TRUE) %>% 
+    select(-fluff1, -fluff2, -fluff3) %>%
+    mutate(dist = dist + 64) %>%
+    mutate(dist = ifelse(startsWith(site, 'consensusflank'), dist + 2, dist))
+}
 
+s2_tidy <- subpool2(rep_1_2_back_norm)
+s2_untidy <- subpool2(rep_1_2_back_norm_conc)
+  
 
 #Subpool 3 contains 2 consensus binding sites with flanks (ATTGACGTCAGC) that 
 #vary in distance from one another by 0 (no inner flanks), 5, 10, 15, 20 and 70 
@@ -337,6 +367,20 @@ controls <-
   mutate(induction = ave_ratio_25/ave_ratio_0) %>%
   mutate(ave_barcodes_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
   mutate(ave_barcodes_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2)
+
+#It looks like, based on the strong positive control, that 25 µM is not 
+#maximally induced. Expression at 4 µM drives ~21x induction after background-
+#normalization. Here it seems to only drive ~10x.
+
+trans_back_norm_pc_spGl4 <- rep_1_2 %>%
+  filter(name == 'pGL4.29 Promega 1-63 + 1-87') %>%
+  mutate(name = 'pGL4.29 Promega 1-63 + 1-87_scramble pGL4.29 Promega 1-63 + 1-87') %>%
+  mutate(subpool = 'subpool3') %>%
+  rbind(rep_1_2) %>%
+  back_norm_1_ind_2()
+
+test <- filter(trans_back_norm_pc_spGl4, 
+               name == 'pGL4.29 Promega 1-63 + 1-87_s pGl4')
   
 
 #Overall library analysis plots-------------------------------------------------
@@ -649,34 +693,32 @@ save_plot('plots/m_control_3_5_0_25.png',
 
 #Subpool 2
 
-p_subpool2_dist_ind_norm <- ggplot(filter(subpool2, site == 'consensusflank'),
-                               aes(dist, induction_norm_med)) + 
+p_subpool2_dist_25 <- s2_untidy %>%
+  filter(site == 'consensusflank') %>%
+  mutate(background = factor(background, 
+                             levels = c('v chr9', 's pGl4', 'v chr5'))) %>%
+  ggplot(aes(dist, ave_ratio_norm, color = as.factor(conc))) + 
   facet_grid(background ~ .) + 
-  geom_hline(yintercept = 1, alpha = 0.5) +
-  geom_point(alpha = 0.5, color = 'black') +
-  geom_smooth(span = 0.1, size = 0.4, se = TRUE, color = 'black') +
-  scale_x_continuous("Distance from Proximal Promoter End (bp)", 
-                     breaks = seq(from = 0, to = 150, by = 10)) +
-  panel_border() + ylab('Induction (a.u.)\nnorm. to median') +
-  background_grid(major = 'xy', minor = 'none')
+  geom_point(alpha = 0.5, size = 1.2) +
+  geom_smooth(aes(fill = as.factor(conc)), span = 0.15, size = 0.4, alpha = 0.2, 
+              se = TRUE) +
+  scale_color_manual(values = c('gray20', 'firebrick3'), 
+                     name = 'forskolin (µM)') +
+  scale_fill_manual(values = c('gray20', 'firebrick3'), 
+                    name = 'forskolin (µM)') +
+  scale_y_log10(limits = c(0.5, 2)) +
+  scale_x_continuous("Distance to minimal promoter (bp)", 
+                     breaks = seq(from = 60, to = 200, by = 20)) +
+  theme(legend.position = 'right',
+        strip.background = element_rect(colour="black", fill="white")) +
+  panel_border(colour = 'black') + 
+  ylab('Average normalized\nexpression (a.u.)') +
+  annotation_logticks(sides = 'l') +
+  background_grid(major = 'x', minor = 'x', colour.major = 'grey90',
+                  colour.minor = 'grey95')
 
-save_plot('plots/subpool2_dist_ind_norm.png',
-          p_subpool2_dist_ind_norm, base_width = 5.5, base_height = 3,
-          scale = 1.3)
-
-p_subpool2_dist_induction <- ggplot(filter(subpool2, site == 'consensusflank'),
-                                   aes(dist, induction)) + 
-  facet_grid(background ~ .) + 
-  geom_point(alpha = 0.5, color = 'black') +
-  geom_smooth(span = 0.1, size = 0.4, se = TRUE, color = 'black') +
-  scale_x_continuous("Distance from Proximal Promoter End (bp)", 
-                     breaks = seq(from = 0, to = 150, by = 10)) +
-  panel_border() + ylab('Induction (a.u.)') +
-  background_grid(major = 'xy', minor = 'none')
-
-save_plot('plots/subpool2_dist_induction.png',
-          p_subpool2_dist_induction, base_width = 5.5, base_height = 3,
-          scale = 1.3)
+ggsave('plots/subpool2_dist_25.pdf', p_subpool2_dist_25, width = 5.25, 
+       height = 2.25, scale = 1.3, units = 'in')
 
 #Subpool 3
 
@@ -759,6 +801,8 @@ p_subpool3_chr9_ind <- ggplot(filter(subpool3,
 save_plot('plots/subpool3_chr9_ind.png',
           p_subpool3_chr9_ind, base_width = 6, base_height = 4,
           scale = 1.3)
+
+#Should I switch this to 10.4 bp??
 
 p_subpool3_chr9_ind_5 <- ggplot(filter(subpool3, 
                                         background == 'v chr9' & spacing != 0 & spacing != 70),
@@ -1023,10 +1067,64 @@ ggplot(test_s5, aes(background, induction_norm)) +
   geom_point(aes(color = distribution))
 
 
-
-
 #Filter out sites that have higher induced expression than their 6 consensus 
-#site-counterpart
+#site-counterpart. Filter out v chr5 background as other 2 had 3-4 sequences
+
+ind_greater_c6 <- function(df) {
+  c6 <- df %>%
+    filter(consensus == 6) %>%
+    select(background, induction, ave_ratio_0_norm, ave_ratio_25_norm) %>%
+    rename(induction_c6 = induction) %>%
+    rename(ave_ratio_0_norm_c6 = ave_ratio_0_norm) %>%
+    rename(ave_ratio_25_norm_c6 = ave_ratio_25_norm)
+  c6_ind_join <- left_join(df, c6, by = 'background') %>%
+    group_by(background) %>%
+    filter(induction >= induction_c6) %>%
+    ungroup() %>%
+    filter(background == 'v chr5')
+  return(c6_ind_join) 
+}
+
+subpool5_ind_greater_c6 <- ind_greater_c6(subpool5)
+
+subpool5_ind_greater_c6 %>%
+  group_by(background) %>%
+  summarize(sequences = n())
+
+p_subpool5_ind_greater_c6 <- ggplot(subpool5_ind_greater_c6, 
+                                    aes(ave_ratio_0_norm, induction)) +
+  geom_point(aes(color = as.factor(consensus)), alpha = 0.7) +
+  scale_color_viridis(discrete = TRUE, name = '# consensus') + 
+  xlab('Normalized expression\nat 0 µM forskolin (a.u.)') + 
+  ylab('Induction')
+
+save_plot('plots/p_subpool5_ind_greater_c6.png', p_subpool5_ind_greater_c6,
+          scale = 1.3)
+
+#What about higher uninduced expression than c6?
+
+exp_0_greater_c6 <- function(df) {
+  c6 <- df %>%
+    filter(consensus == 6) %>%
+    select(background, induction, ave_ratio_0_norm, ave_ratio_25_norm) %>%
+    rename(induction_c6 = induction) %>%
+    rename(ave_ratio_0_norm_c6 = ave_ratio_0_norm) %>%
+    rename(ave_ratio_25_norm_c6 = ave_ratio_25_norm)
+  c6_exp_0_join <- left_join(df, c6, by = 'background') %>%
+    group_by(background) %>%
+    filter(ave_ratio_0_norm >= ave_ratio_0_norm_c6) %>%
+    ungroup()
+  return(c6_exp_0_join) 
+}
+
+subpool5_exp_0_greater_c6 <- exp_0_greater_c6(subpool5)
+
+subpool5_exp_0_greater_c6 %>%
+  group_by(background) %>%
+  summarize(sequences = n())
+
+
+
 
 exp_25_greater_c6 <- function(df) {
   c6 <- df %>%
@@ -1037,7 +1135,7 @@ exp_25_greater_c6 <- function(df) {
     rename(ave_ratio_25_norm_c6 = ave_ratio_25_norm)
   c6_exp_25_join <- left_join(df, c6, by = 'background') %>%
     group_by(background) %>%
-    filter(ave_ratio_25_norm > ave_ratio_25_norm_c6) %>%
+    filter(ave_ratio_25_norm >= ave_ratio_25_norm_c6) %>%
     ungroup()
   return(c6_exp_25_join) 
 }
@@ -1047,6 +1145,13 @@ subpool5_exp_25_greater_c6 <- exp_25_greater_c6(subpool5)
 subpool5_exp_25_greater_c6 %>%
   group_by(background) %>%
   summarize(sequences = n())
+
+
+
+
+s5_ind_c6_head11 <- subpool5_ind_greater_c6 %>%
+  arrange(desc(induction)) %>%
+  head(11)
 
 #Count site type per site location
 
@@ -1093,15 +1198,16 @@ site_loc_type_count <- function(df) {
     rename(type = site6) %>%
     select(-3) %>%
     mutate(site = 6)
-  site_join <- bind_rows(site1, site2, site3, site4, site5, site6)
+  site_join <- bind_rows(site1, site2, site3, site4, site5, site6) %>%
+    ungroup()
   return(site_join)
 }
 
-subpool5_exp_25_greater_c6_sites <- site_loc_type_count(subpool5_exp_25_greater_c6)
+s5_ind_c6_head11_sites <- site_loc_type_count(s5_ind_c6_head11) %>%
+  mutate(type = factor(type, levels = c('nosite', 'weak', 'consensus')))
 
-p_site_exp_25_greater_c6 <- ggplot(subpool5_exp_25_greater_c6_sites,
-                                   aes(as.factor(site), counts, fill = type)) +
-  facet_grid(. ~ background) +
+p_site_ind_greater_c6 <- ggplot(subpool5_ind_greater_c6_sites,
+                                aes(as.factor(site), counts, fill = type)) +
   geom_bar(stat = 'identity', position = 'fill') +
   scale_fill_viridis(discrete = TRUE) + 
   xlab('Site position') + 
@@ -1109,6 +1215,8 @@ p_site_exp_25_greater_c6 <- ggplot(subpool5_exp_25_greater_c6_sites,
 
 save_plot('plots/p_site_exp_25_greater_c6.png', p_site_exp_25_greater_c6, 
           base_width = 4, base_height = 2, scale = 1.5)
+
+#compare induction to single-site library for site-specific contribution
 
 compare_2_5 <- inner_join(subpool2, subpool5, 
                           by = c('most_common', 'background', 'ratio_0A_back',
@@ -1473,6 +1581,9 @@ p_ind_site_ind_back_anova <- ind_site_ind_back_anova %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1), 
         axis.ticks.x = element_blank())
 
+save_plot('plots/p_ind_site_ind_back_anova.png', p_ind_site_ind_back_anova,
+          scale = 1.3)
+
 p_ind_sit_ind_back_grid <- plot_grid(p_ind_site_ind_back, 
                                      p_ind_site_ind_back_sum, 
                                      p_ind_site_ind_back_anova,
@@ -1526,7 +1637,11 @@ save_plot('plots/p_log_curve.png', p_log_curve,
 
 #In order to do this need to have data normalized between 0 and 1, so will
 #determine max average expression observed in sp5, and normalize all other 
-#variants to this value
+#variants to this value. Tried taking log2(induction) before doing this and 
+#generated values below the [0,1] range for binomial fit due to inductions below
+#1.
+
+test <- var_log2(subpool5)
 
 subpool5_norm_max <- function(df) {
   max <- df %>%
@@ -1544,9 +1659,6 @@ subpool5_norm_max <- function(df) {
 }
 
 subpool5_binomial <- subpool5_norm_max(subpool5)
-
-#Need to fix this, Warning message: In eval(expr, envir, enclos) : non-integer 
-# #successes in a binomial glm!
 
 ind_site_ind_back_binom <- function(df) {
   model <- glm(induction ~ 
