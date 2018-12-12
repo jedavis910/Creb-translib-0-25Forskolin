@@ -18,6 +18,11 @@ cbPalette2 <- c('#39568CFF', '#95D840FF')
 
 forskolin2 <- c('white', 'aquamarine3')
 
+figurefont_theme <- theme(text = element_text(size = 8)) +
+  theme(axis.title = element_text(size = 8)) +
+  theme(legend.title = element_text(size = 9)) +
+  theme(axis.text = element_text(size = 8))
+
 #Written for transient library analyses of indexed reads corresponding to:
 #bc_JD02: RNA induced rep. 1
 #bc_JD03: RNA induced rep. 2
@@ -143,7 +148,8 @@ var_rep <- function(df0A, df0B, df25A, df25B) {
 
 rep_1_2 <- var_rep(RNA_DNA_R0A, RNA_DNA_R0B, RNA_DNA_R25A, RNA_DNA_R25B)
 
-#Normalize to background
+
+#Normalize to background--------------------------------------------------------
 
 back_norm_1_ind_2 <- function(df1) {
   gsub_df1 <- df1 %>%
@@ -227,7 +233,6 @@ var_conc_exp <- function(df) {
 rep_1_2_back_norm_conc <- var_conc_exp(rep_1_2_back_norm)
 
 
-
 #Subpool separation-------------------------------------------------------------
 
 #Separate string qualifiers per subpool
@@ -255,6 +260,7 @@ subpool2 <- function(df) {
 
 s2_tidy <- subpool2(rep_1_2_back_norm)
 s2_untidy <- subpool2(rep_1_2_back_norm_conc)
+
   
 
 #Subpool 3 contains 2 consensus binding sites with flanks (ATTGACGTCAGC) that 
@@ -693,22 +699,35 @@ save_plot('plots/m_control_3_5_0_25.png',
 
 #Subpool 2
 
-p_subpool2_dist_25 <- s2_untidy %>%
+library(caTools)
+
+moveavg_dist3 <- function(df) {
+  df <- df %>%
+    mutate(ave_3 = runmean(ave_ratio_norm, 3, alg = 'R', endrule = 'NA'))
+}
+
+s2_untidy_moveavg3 <- s2_untidy %>%
+  select(background, site, dist, ave_ratio_norm, conc) %>%
+  group_by(background, site, conc) %>%
+  arrange(dist, .by_group = TRUE) %>%
+  nest() %>%
+  mutate(ave_3 = map(.$data, moveavg_dist3)) %>%
+  unnest() %>%
+  select(-dist1, -ave_ratio_norm1)
+
+p_subpool2_dist_25 <- s2_untidy_moveavg3 %>%
   filter(site == 'consensusflank') %>%
   mutate(background = factor(background, 
                              levels = c('v chr9', 's pGl4', 'v chr5'))) %>%
   ggplot(aes(dist, ave_ratio_norm, color = as.factor(conc))) + 
   facet_grid(background ~ .) + 
+  geom_line(aes(y = ave_3), size = 0.4) +
   geom_point(alpha = 0.5, size = 1.2) +
-  geom_smooth(aes(fill = as.factor(conc)), span = 0.15, size = 0.4, alpha = 0.2, 
-              se = TRUE) +
   scale_color_manual(values = c('gray20', 'firebrick3'), 
                      name = 'forskolin (µM)') +
-  scale_fill_manual(values = c('gray20', 'firebrick3'), 
-                    name = 'forskolin (µM)') +
   scale_y_log10(limits = c(0.5, 2)) +
   scale_x_continuous("Distance to minimal promoter (bp)", 
-                     breaks = seq(from = 60, to = 200, by = 20)) +
+                     breaks = seq(from = 66, to = 206, by = 20)) +
   theme(legend.position = 'right',
         strip.background = element_rect(colour="black", fill="white")) +
   panel_border(colour = 'black') + 
@@ -1694,11 +1713,11 @@ p_ind_site_ind_back_binom <- ggplot(ind_site_ind_back_binom_p_r,
 
 #Median analysis of expression--------------------------------------------------
 
-#Filter DNA reads to set a minimum of 1 read per BC join with RNA and determine
+#Filter DNA reads to set a minimum of 2 reads per BC join with RNA and determine
 #RNA/DNA
 
 bc_dna_join_rna <- function(df1, df2) {
-  filter_reads <- filter(df1, num_reads > 0)
+  filter_reads <- filter(df1, num_reads > 1)
   DNA_RNA_join <- left_join(filter_reads, df2,
                             by = c("barcode", "name", "subpool", 
                                    "most_common"), 
@@ -1713,7 +1732,7 @@ RNA_DNA_bc_R0B <- bc_dna_join_rna(bc_join_DNA, bc_join_R0B)
 RNA_DNA_bc_R25A <- bc_dna_join_rna(bc_join_DNA, bc_join_R25A)
 RNA_DNA_bc_R25B <- bc_dna_join_rna(bc_join_DNA, bc_join_R25B)
 
-#Count barcodes per variant per DNA and RNA, set minimum of 3 BC's per variant 
+#Count barcodes per variant per DNA and RNA, set minimum of 8 BC's per variant 
 #in DNA sample, take median RNA/DNA per variant, find absolute deviation for
 #each BC per variant then per variant determine the median absolute deviation.
 
@@ -1721,7 +1740,7 @@ ratio_bc_med_var <- function(df1) {
   bc_count_DNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     summarize(barcodes_DNA = n()) %>%
-    filter(barcodes_DNA > 2)
+    filter(barcodes_DNA > 7)
   bc_count_RNA <- df1 %>%
     group_by(subpool, name, most_common) %>%
     filter(num_reads_RNA != 0) %>%
@@ -2012,6 +2031,163 @@ p_DNA_sum_over_med_25 <- ggplot(DNA_sum_over_med, aes(sum_over_med_25, normalize
   ylab('Normalized DNA BC reads')
 
 save_plot('plots/DNA_sum_over_med_25.png', p_DNA_sum_over_med_25, scale = 1.3)
+
+
+#Plotting using median----------------------------------------------------------
+
+med_rep_1_2_0rm <- med_rep_1_2 %>%
+  filter(med_ratio_0A != as.double(0)) %>%
+  filter(med_ratio_0B != as.double(0)) %>%
+  filter(med_ratio_25A != as.double(0)) %>%
+  filter(med_ratio_25B != as.double(0))
+
+log10_med_rep_1_2 <- var_log10(med_rep_1_2_0rm)
+
+ggplot(med_rep_1_2_0rm, aes(med_ratio_0A, med_ratio_0B)) +
+  geom_point(alpha = 0.2) + 
+  geom_point(data = filter(med_rep_1_2_0rm, 
+                           grepl(
+                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
+                             name)), 
+             fill = 'orange', shape = 21, size = 2.25) + 
+  geom_point(data = filter(med_rep_1_2_0rm, 
+                           name == 'pGL4.29 Promega 1-63 + 1-87'), 
+             fill = 'red', shape = 21, size = 2.25) +
+  annotation_logticks(sides = 'bl') +
+  xlab("Expression (a.u.) replicate 1") +
+  ylab("Expression (a.u.) replicate 2") +
+  scale_x_log10(limits = c(0.2,10)) + 
+  scale_y_log10(limits = c(0.2,10)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 0.5, y = 5, 
+           label = paste('r =', round(cor(log10_med_rep_1_2$med_ratio_0A,
+                                          log10_med_rep_1_2$med_ratio_0B,
+                                          use = "pairwise.complete.obs", 
+                                          method = "pearson"), 2)))
+
+ggplot(med_rep_1_2_0rm, aes(med_ratio_25A, med_ratio_25B)) +
+  geom_point(alpha = 0.2) + 
+  geom_point(data = filter(med_rep_1_2_0rm, 
+                           grepl(
+                             'subpool5_no_site_no_site_no_site_no_site_no_site_no_site',
+                             name)), 
+             fill = 'orange', shape = 21, size = 2.25) + 
+  geom_point(data = filter(med_rep_1_2_0rm, 
+                           name == 'pGL4.29 Promega 1-63 + 1-87'), 
+             fill = 'red', shape = 21, size = 2.25) +
+  annotation_logticks(sides = 'bl') +
+  xlab("Expression (a.u.) replicate 1") +
+  ylab("Expression (a.u.) replicate 2") +
+  scale_x_log10(limits = c(0.05,30)) + 
+  scale_y_log10(limits = c(0.05,30)) +
+  background_grid(major = 'xy', minor = 'none') + 
+  annotate("text", x = 0.5, y = 5, 
+           label = paste('r =', round(cor(log10_med_rep_1_2$med_ratio_25A,
+                                          log10_med_rep_1_2$med_ratio_25B,
+                                          use = "pairwise.complete.obs", 
+                                          method = "pearson"), 2)))
+
+
+
+back_norm_1_ind_2_med <- function(df1) {
+  gsub_df1 <- df1 %>%
+    ungroup () %>%
+    filter(subpool != 'control') %>%
+    mutate(
+      name = gsub('Smith R. Vista chr9:83712599-83712766', 'v chr9', name),
+      name = gsub('Vista Chr5:88673410-88674494', 'v chr5', name),
+      name = gsub('scramble pGL4.29 Promega 1-63 \\+ 1-87', 's pGl4', name)
+    ) %>%
+    mutate(background = name) %>%
+    mutate(background = str_sub(background, 
+                                nchar(background)-5, 
+                                nchar(background)))
+  backgrounds <- gsub_df1 %>%
+    filter(startsWith(name,
+                      'subpool5_no_site_no_site_no_site_no_site_no_site_no_site')
+    ) %>%
+    select(background, med_ratio_0A, med_ratio_0B, med_ratio_25A, med_ratio_25B) %>%
+    rename(med_ratio_0A_back = med_ratio_0A) %>%
+    rename(med_ratio_0B_back = med_ratio_0B) %>%
+    rename(med_ratio_25A_back = med_ratio_25A) %>%
+    rename(med_ratio_25B_back = med_ratio_25B)
+  back_join_norm <- left_join(gsub_df1, backgrounds, by = 'background') %>%
+    mutate(med_ratio_0A_norm = med_ratio_0A/med_ratio_0A_back) %>%
+    mutate(med_ratio_0B_norm = med_ratio_0B/med_ratio_0B_back) %>%
+    mutate(med_ratio_25A_norm = med_ratio_25A/med_ratio_25A_back) %>%
+    mutate(med_ratio_25B_norm = med_ratio_25B/med_ratio_25B_back) %>%
+    mutate(ave_med_ratio_0_norm = (med_ratio_0A_norm + med_ratio_0B_norm)/2) %>%
+    mutate(ave_med_ratio_25_norm = (med_ratio_25A_norm + med_ratio_25B_norm)/2) %>%
+    mutate(induction = ave_med_ratio_25_norm/ave_med_ratio_0_norm)
+}
+
+rep_1_2_med_back_norm <- back_norm_1_ind_2_med(med_rep_1_2_0rm)
+
+var_conc_exp_med <- function(df) {
+  df_0 <- df %>%
+    mutate(ave_barcode_0 = (barcodes_RNA_0A + barcodes_RNA_0B)/2) %>%
+    select(subpool, name, most_common, background, ave_barcode_0, 
+           ave_med_ratio_0_norm) %>%
+    mutate(conc = 0) %>%
+    rename(ave_med_ratio_norm = ave_med_ratio_0_norm) %>%
+    rename(ave_barcode = ave_barcode_0)
+  df_25 <- df %>%
+    mutate(ave_barcode_25 = (barcodes_RNA_25A + barcodes_RNA_25B)/2) %>%
+    select(subpool, name, most_common, background, ave_barcode_25, 
+           ave_med_ratio_25_norm) %>%
+    mutate(conc = 25) %>%
+    rename(ave_med_ratio_norm = ave_med_ratio_25_norm) %>%
+    rename(ave_barcode = ave_barcode_25)
+  df_0_25 <- rbind(df_0, df_25)
+  return(df_0_25)
+}
+
+rep_1_2_med_back_norm_conc <- var_conc_exp_med(rep_1_2_med_back_norm)
+
+#Plot subpool 2 distance effects
+
+s2_untidy_med <- subpool2(rep_1_2_med_back_norm_conc)
+
+library(caTools)
+
+moveavg_dist3 <- function(df) {
+  df <- df %>%
+    mutate(ave_3 = runmean(ave_med_ratio_norm, 3, alg = 'R', endrule = 'NA'))
+}
+
+s2_untidy_moveavg3 <- s2_untidy_med %>%
+  select(background, site, dist, ave_med_ratio_norm, conc) %>%
+  group_by(background, site, conc) %>%
+  arrange(dist, .by_group = TRUE) %>%
+  nest() %>%
+  mutate(ave_3 = map(.$data, moveavg_dist3)) %>%
+  unnest() %>%
+  select(-dist1, -ave_med_ratio_norm1)
+
+p_subpool2_dist_25 <- s2_untidy_moveavg3 %>%
+  filter(site == 'consensusflank') %>%
+  mutate(background = factor(background, 
+                             levels = c('v chr9', 's pGl4', 'v chr5'))) %>%
+  ggplot(aes(dist, ave_med_ratio_norm, color = as.factor(conc))) + 
+  facet_grid(background ~ .) + 
+  geom_line(aes(y = ave_3), size = 0.4) +
+  geom_point(alpha = 0.5, size = 1.2) +
+  scale_color_manual(values = c('gray20', 'firebrick3'), 
+                     name = 'forskolin (µM)') +
+  scale_y_log10(limits = c(0.4, 3)) +
+  scale_x_continuous("Distance to minimal promoter (bp)", 
+                     breaks = seq(from = 66, to = 206, by = 20)) +
+  theme(legend.position = 'right',
+        strip.background = element_rect(colour="black", fill="white")) +
+  panel_border(colour = 'black') + 
+  ylab('Average normalized\nexpression (a.u.)') +
+  annotation_logticks(sides = 'l') +
+  background_grid(major = 'x', minor = 'x', colour.major = 'grey90',
+                  colour.minor = 'grey95') +
+  figurefont_theme
+
+ggsave('plots/subpool2_dist_25.pdf', p_subpool2_dist_25, units = 'in',
+       width = 5.25, height = 2.66)
 
 
 #Determining subpool bias-------------------------------------------------------
