@@ -271,24 +271,22 @@ s2_untidy <- subpool2(rep_1_2_back_norm_conc)
 #and the background. Added 2 to all distances to measure the start of BS and not 
 #to flank. Added 4 to all spacing but 0 to include flank spaces.
 
-subpool3 <- 
-  filter(rep_1_2_back_norm, subpool == "subpool3") %>%
-  ungroup () %>%
-  select(-subpool) %>%
-  mutate(name = gsub('2BS ', '', name), 
-         name = gsub(' bp spacing ', '_', name)) %>%
-  separate(name, 
-           into = c("subpool", "spacing", "fluff2", "fluff3", "dist", "fluff4"),
-           sep = "_", convert = TRUE) %>%
-  select(-subpool, -fluff2, -fluff3, -fluff4) %>%
-  mutate(dist = as.integer(dist + 2)) %>%
-  mutate(spacing = ifelse(spacing != as.integer(0), 
-                          as.integer(spacing + 4), 
-                          as.integer(spacing))) %>%
-  group_by(background, spacing) %>%
-  mutate(med_induction = median(induction)) %>%
-  ungroup() %>%
-  mutate(induction_norm_med = induction/med_induction)
+subpool3 <- function(df) {
+  df <- df %>%
+    filter(subpool == "subpool3") %>%
+    ungroup() %>%
+    select(-subpool) %>%
+    mutate(name = gsub('2BS ', '', name), 
+           name = gsub(' bp spacing ', '_', name)) %>%
+    separate(name, 
+             into = c("subpool", "spacing", "fluff2", "fluff3", "dist", "fluff4"),
+             sep = "_", convert = TRUE) %>%
+    select(-subpool, -fluff2, -fluff3, -fluff4) %>%
+    mutate(dist = as.integer(dist + 2 + 64)) %>%
+    mutate(spacing = 
+             ifelse(spacing != as.integer(0), 
+                    as.integer(spacing + 4), as.integer(spacing)))
+}
 
 #Subpool 4 contains 2 binding sites with flanks that vary in site type from 
 #consensus (ATTGACGTCAGC) moderate (ATTGACGTCTGC) weak (ATTGAAGTCAGC) and 
@@ -1792,6 +1790,12 @@ med_var_rep <- function(df0A, df0B, df25A, df25B) {
 med_rep_1_2 <- med_var_rep(med_RNA_DNA_R0A, med_RNA_DNA_R0B, 
                            med_RNA_DNA_R25A, med_RNA_DNA_R25B)
 
+med_rep_1_2_0rm <- med_rep_1_2 %>%
+  filter(med_ratio_0A != as.double(0)) %>%
+  filter(med_ratio_0B != as.double(0)) %>%
+  filter(med_ratio_25A != as.double(0)) %>%
+  filter(med_ratio_25B != as.double(0))
+
 med_rep_1_2_0corr <- med_rep_1_2 %>%
   mutate(med_ratio_0A = if_else(
     med_ratio_0A  == as.double(0),
@@ -1809,12 +1813,6 @@ med_rep_1_2_0corr <- med_rep_1_2 %>%
     med_ratio_25B  == as.double(0),
     as.double(0.01), 
     med_ratio_25B ))
-
-med_rep_1_2_0rm <- med_rep_1_2 %>%
-  filter(med_ratio_0A != as.double(0)) %>%
-  filter(med_ratio_0B != as.double(0)) %>%
-  filter(med_ratio_25A != as.double(0)) %>%
-  filter(med_ratio_25B != as.double(0))
  
 
 #Following mad/med per med
@@ -2187,6 +2185,44 @@ p_subpool2_dist_25 <- s2_untidy_moveavg3 %>%
   figurefont_theme
 
 ggsave('plots/subpool2_dist_25.pdf', p_subpool2_dist_25, units = 'in',
+       width = 5.25, height = 2.66)
+
+#Plot subpool 3 induction to compare to subpool 2
+
+s3_untidy_med <- subpool3(rep_1_2_med_back_norm_conc)
+
+s3_untidy_moveavg3 <- s3_untidy_med %>%
+  select(background, spacing, dist, ave_med_ratio_norm, conc) %>%
+  group_by(background, spacing, conc) %>%
+  arrange(dist, .by_group = TRUE) %>%
+  nest() %>%
+  mutate(ave_3 = map(.$data, moveavg_dist3)) %>%
+  unnest() %>%
+  select(-dist1, -ave_med_ratio_norm1)
+
+p_subpool3_dist_space5_25 <- s3_untidy_moveavg3 %>%
+  filter(spacing == 5) %>%
+  mutate(background = factor(background, 
+                             levels = c('v chr9', 's pGl4', 'v chr5'))) %>%
+  ggplot(aes(dist, ave_med_ratio_norm, color = as.factor(conc))) + 
+  facet_grid(background ~ .) + 
+  geom_line(aes(y = ave_3), size = 0.4) +
+  geom_point(alpha = 0.5, size = 1.2) +
+  scale_color_manual(values = c('gray20', 'firebrick3'), 
+                     name = 'forskolin (µM)') +
+  scale_y_log10(limits = c(0.5, 20)) +
+  scale_x_continuous("Distance to minimal promoter (bp)", 
+                     breaks = seq(from = 66, to = 206, by = 20)) +
+  theme(legend.position = 'right',
+        strip.background = element_rect(colour="black", fill="white")) +
+  panel_border(colour = 'black') + 
+  ylab('Average normalized\nexpression (a.u.)') +
+  annotation_logticks(sides = 'l') +
+  background_grid(major = 'x', minor = 'x', colour.major = 'grey90',
+                  colour.minor = 'grey95') +
+  figurefont_theme
+
+ggsave('plots/subpool3_dist_space5_25.pdf', p_subpool3_dist_space5_25, units = 'in',
        width = 5.25, height = 2.66)
 
 
